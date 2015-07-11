@@ -30,6 +30,16 @@ use namespace::autoclean;
 
   $wu->waitall();
 
+There are many other Parallel::* applications in CPAN - it would be worth
+any developer's time to look through those and choose the best one.
+
+This is a very simple forking implementation of parallelism, with the
+ability to pass data back from the asyncronous child process in a
+relatively efficient way (with the limitation of using a pipe to pass
+the information, serialized, back).  It was designed to be very simple
+for a developer to use, with the ability to pass reasonably large amounts
+of data back to the parent process.
+
 =cut
 
 =method new
