@@ -142,8 +142,12 @@ to exit.  This method handles children that C<die()> or return
 a serializable data structure.  When all children return, this
 method will return.
 
-If a child dies, this method will C<die()> and propagate a
+If a child dies unexpectedly, this method will C<die()> and propagate a
 modified exception.
+
+This method has a side-effect of reaping any children that haven't yet
+been reaped.  If you aren't messing with C<$SIG{CHLD}>, you do not need
+to worry about this.
 
 =cut
 
@@ -187,6 +191,10 @@ If C<wait()> is called on a process that is already done
 executing, it simply returns.  Otherwise, it waits until the
 child process's work unit is complete and executes the callback
 routine, then returns.
+
+This method has a side-effect of reaping any children that haven't yet
+been reaped.  If you aren't messing with C<$SIG{CHLD}>, you do not need
+to worry about this.
 
 =cut
 
