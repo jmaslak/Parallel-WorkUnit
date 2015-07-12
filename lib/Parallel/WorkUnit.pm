@@ -15,6 +15,7 @@ use autodie;
 
 use TryCatch;
 my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
+if ($do_thread) { eval 'use Thread::Queue;'; }
 
 use Carp;
 use IO::Pipe;
@@ -63,10 +64,28 @@ has '_subprocs' => (
     init_arg => undef
 );
 
+# This only gets used on Win32.
+has '_queue' => (
+    is       => 'rw',
+    init_arg => undef
+);
+
+# This only gets used on Win32
+has '_count' => (
+    is       => 'rw',
+    isa      => 'Int',
+    init_arg => undef,
+    default  => 1
+);
+
 sub BUILD {
     my $self = shift;
 
     $self->_subprocs( {} );
+
+    if ($do_thread) {
+        $self->_queue( Thread::Queue->new() );
+    }
 }
 
 =method async( sub { ... }, \&callback )
@@ -106,13 +125,13 @@ sub async {
 
     my ($pid, $thr);
     if ($do_thread) {
-        $thr = threads->create( sub { $self->_child($sub, $pipe); } );
-        if ( !defined($thr) ) { die "Fork failed: $!"; }
+        $pid = $self->_count();
+        $self->_count($pid + 1);
 
-        $pid = $thr->tid();
+        $thr = threads->create( sub { $self->_child($sub, $pipe, $pid); } );
+        if ( !defined($thr) ) { die "thread creation failed: $!"; }
     } else {
         $pid = fork();
-        if ( !defined($pid) ) { die "Fork failed: $!"; }
     }
 
     if ($pid) {
@@ -129,13 +148,13 @@ sub async {
         return $pid;
 
     } else {
-        $self->_child($sub, $pipe);
+        $self->_child($sub, $pipe, undef);
     }
 }
 
 sub _child {
-    if (scalar(@_) != 3) { confess 'invalid call'; }
-    my ($self, $sub, $pipe) = @_;
+    if (scalar(@_) != 4) { confess 'invalid call'; }
+    my ($self, $sub, $pipe, $pid) = @_;
 
     # We are in the child process
     $pipe->writer();
@@ -143,9 +162,9 @@ sub _child {
 
     try {
         my $result = $sub->();
-        $self->_send_result( $pipe, $result );
+        $self->_send_result( $pipe, $result, $pid );
     } catch($err) {
-        $self->_send_error( $pipe, $err );
+        $self->_send_error( $pipe, $err, $pid );
     };
 
     # Windows doesn't do fork(), it does threads...
@@ -175,21 +194,27 @@ sub waitall {
     my $sp = $self->_subprocs();
     if ( !keys(%$sp) ) { return; }
 
-    my $s = IO::Select->new();
-    foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
 
-    my @ready = $s->can_read;
+    if ($do_thread) {
+        my $child = $self->_queue()->dequeue(1);
 
-    foreach my $fh (@ready) {
-        foreach my $child ( keys(%$sp) ) {
-            if ( defined($fh->fileno())) {
-                if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
-                    my $thr = $self->_subprocs()->{$child}{thread};
-                    $self->_read_result($child);
+        my $thr = $self->_subprocs()->{$child}{thread};
+        $self->_read_result($child);
 
-                    if ($do_thread) {
-                        $thr->join();
-                    } else {
+        $thr->join();
+    } else {
+        my $s = IO::Select->new();
+        foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
+
+        my @ready = $s->can_read();
+
+        foreach my $fh (@ready) {
+            foreach my $child ( keys(%$sp) ) {
+                if ( defined($fh->fileno())) {
+                    if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
+                        my $thr = $self->_subprocs()->{$child}{thread};
+                        $self->_read_result($child);
+
                         waitpid($child, 0);
                     }
                 }
@@ -238,27 +263,31 @@ sub wait {
 }
 
 sub _send_result {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $msg ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $msg, $pid ) = @_;
 
-    $self->_send( $fh, 'RESULT', $msg );
+    $self->_send( $fh, 'RESULT', $msg, $pid );
 }
 
 sub _send_error {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $err ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $err, $pid ) = @_;
 
-    $self->_send( $fh, 'ERROR', $err );
+    $self->_send( $fh, 'ERROR', $err, $pid );
 }
 
 sub _send {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $type, $data ) = @_;
+    if ( $#_ != 4 ) { confess 'invalid call'; }
+    my ( $self, $fh, $type, $data, $pid ) = @_;
 
     my $msg = Storable::freeze( \$data );
 
     if (!defined($msg)) {
         die 'freeze() returned undef for child return value';
+    }
+
+    if ($do_thread) {
+        $self->_queue()->enqueue($pid);
     }
 
     $fh->write($type);
