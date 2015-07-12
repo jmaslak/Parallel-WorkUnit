@@ -30,11 +30,11 @@ require_ok('Parallel::WorkUnit');
 my $wu = Parallel::WorkUnit->new();
 ok(defined($wu), "Constructer returned object");
 
+my $result;
 SKIP: {
     skip("Old version of storable is okay with regex", 1)
-        unless ($^V and $^V ge v5.10.0);
+        unless ($^V and $^V ge v5.12.0);
 
-    my $result;
     $wu->async(
         sub { qr{xxx} },
         sub { $result = shift; }
@@ -43,7 +43,6 @@ SKIP: {
     dies_ok { $wu->waitall(); } 'Child throws a storable error for regex';
 }
 
-my $result;
 $wu->async(
     sub { sub { 1; } },
     sub { $result = shift; }
