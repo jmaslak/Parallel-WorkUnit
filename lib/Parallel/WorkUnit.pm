@@ -7,6 +7,7 @@ use v5.14;
 use utf8;
 
 package Parallel::WorkUnit;
+
 # ABSTRACT: Provide easy-to-use forking with ability to pass back data
 
 use strict;
@@ -30,8 +31,7 @@ use namespace::autoclean;
 
   $wu->waitall();
 
-There are many other Parallel::* applications in CPAN - it would be worth
-any developer's time to look through those and choose the best one.
+=head1 DESCRIPTION
 
 This is a very simple forking implementation of parallelism, with the
 ability to pass data back from the asyncronous child process in a
@@ -39,6 +39,16 @@ relatively efficient way (with the limitation of using a pipe to pass
 the information, serialized, back).  It was designed to be very simple
 for a developer to use, with the ability to pass reasonably large amounts
 of data back to the parent process.
+
+There are many other Parallel::* applications in CPAN - it would be worth
+any developer's time to look through those and choose the best one.
+
+=head1 SIDE EFFECTS
+
+This module, when instantiated, sets the SIG{CHLD} handler to 'IGNORE'.
+This means that children will be automatically reaped on most systems.
+In addition, the C<wait()> and C<waitall()> methods will attempt to
+reap any outstanding children.
 
 =cut
 
@@ -58,7 +68,8 @@ sub BUILD {
     my $self = shift;
 
     $self->_subprocs( {} );
-    $SIG{CHLD} = \&_sigchld;
+    # $SIG{CHLD} = \&_sigchld;
+    $SIG{CHLD} = 'IGNORE';
 }
 
 =method async( sub { ... }, \&callback )
@@ -90,7 +101,8 @@ sub async {
     if ( $#_ != 2 ) { confess 'invalid call'; }
     my ( $self, $sub, $callback ) = @_;
 
-    my $pipe = IO::Pipe->new();
+    my $pipe     = IO::Pipe->new();
+    my $exitpipe = IO::Pipe->new();
 
     my $pid = fork;
     if ( !defined($pid) ) { die "Fork failed: $!"; }
@@ -99,9 +111,12 @@ sub async {
 
         # We are in the parent process
         $pipe->reader();
+        $exitpipe->writer();
+        $exitpipe->autoflush(1);
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
+            exitfh   => $exitpipe,
             callback => $callback
         };
 
@@ -112,14 +127,14 @@ sub async {
         # We are in the child process
         $pipe->writer();
         $pipe->autoflush(1);
+        $exitpipe->reader();
 
         try {
             my $result = $sub->();
-
-            $self->_send_result( $pipe, $result );
+            $self->_send_result( $pipe, $exitpipe, $result );
         } catch($err) {
 
-            $self->_send_error( $pipe, $err );
+            $self->_send_error( $pipe, $exitpipe, $err );
         };
 
         exit();
@@ -143,11 +158,7 @@ sub waitall {
     my ($self) = @_;
 
     my $sp = $self->_subprocs();
-    if ( !keys(%$sp) ) {
-
-        # We have no keys
-        return;
-    }
+    if ( !keys(%$sp) ) { return; }
 
     my $s = IO::Select->new();
     foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
@@ -156,11 +167,17 @@ sub waitall {
 
     foreach my $fh (@ready) {
         foreach my $child ( keys(%$sp) ) {
-            if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
-                $self->_read_result($child);
+            if ( defined($fh->fileno())) {
+                if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
+                    $self->_read_result($child);
+                }
             }
         }
     }
+   
+    # Just in case SIG{CHLD}="IGNORE" doesn't cause the children to
+    # be reaped. 
+    while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 ) { }
 
     # Tail recursion
     goto &waitall;
@@ -190,41 +207,57 @@ sub wait {
         return;
     }
 
-    $self->_read_result($pid);
+    my $result = $self->_read_result($pid);
+
+    # Just in case SIG{CHLD}="IGNORE" doesn't cause the children to
+    # be reaped. 
+    while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 ) { }
+
+    return $result;
 }
 
 sub _send_result {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $msg ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $exitpipe, $msg ) = @_;
 
-    $self->_send( $fh, 'RESULT', $msg );
+    $self->_send( $fh, $exitpipe, 'RESULT', $msg );
 }
 
 sub _send_error {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $err ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $exitpipe, $err ) = @_;
 
-    $self->_send( $fh, 'ERROR', $err );
+    $self->_send( $fh, $exitpipe, 'ERROR', $err );
 }
 
 sub _send {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $type, $data ) = @_;
+    if ( $#_ != 4 ) { confess 'invalid call'; }
+    my ( $self, $fh, $exitpipe, $type, $data ) = @_;
 
-    print $fh $type, "\n";
+    $fh->write($type);
+    $fh->write("\n");
 
     my $msg = Storable::freeze( \$data );
 
-    print $fh length($msg), "\n";
+    $fh->write(length($msg));
+    $fh->write("\n");
+
+    binmode($fh, ':raw');
+
     $fh->write($msg);
+
+    my $j = <$exitpipe>;
+    $exitpipe->close();
+    $fh->close();
 }
 
 sub _read_result {
     if ( $#_ != 1 ) { confess 'invalid call'; }
     my ( $self, $child ) = @_;
 
-    my $cinfo = $self->_subprocs()->{$child};
-    my $fh    = $cinfo->{fh};
+    my $cinfo  = $self->_subprocs()->{$child};
+    my $fh     = $cinfo->{fh};
+    my $exitfh = $cinfo->{exitfh};
 
     my $type = <$fh>;
     if ( !defined($type) ) { die 'Could not read child data'; }
@@ -233,27 +266,32 @@ sub _read_result {
     my $size = <$fh>;
     chomp($size);
 
-    my $result;
-    $fh->read( $result, $size );
+    binmode($fh);
+
+    my $result = '';
+
+    my $part;
+    my $ret = 1;
+    while ( defined($ret) && ( length($result) < $size ) ) {
+        my $s = $size - length($result);
+
+        my $part = '';
+        $ret = $fh->read( $part, $s );
+        if ( defined($ret) ) { $result .= $part; }
+    }
+    print $exitfh "DONE\n";
 
     my $data = ${ Storable::thaw($result) };
 
     delete $self->_subprocs()->{$child};
+    $fh->close();
+    $exitfh->close();
 
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
     } else {
         die("Child died with error: $data");
     }
-}
-
-sub _sigchld {
-
-    # There are a bunch of subtle gotchas here.
-    # So we hopefully will rarely, if ever, see this fire
-    # unless the child has properly sent a result or an
-    # error.
-    while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 ) { }
 }
 
 __PACKAGE__->meta->make_immutable;

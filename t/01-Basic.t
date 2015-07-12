@@ -29,7 +29,7 @@ alarm 120; # It would be nice if we did this a better way, since
 # Instantiate the object
 require_ok('Parallel::WorkUnit');
 my $wu = Parallel::WorkUnit->new();
-ok(defined($wu));
+ok(defined($wu), "Constructer returned object");
 
 # We're going to spawn 50 children and test the return value
 my %RESULTS;
