@@ -18,8 +18,11 @@ my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
 if ($do_thread) { eval 'use Thread::Queue;'; }
 
 use Carp;
-use IO::Pipe;
-use IO::Select;
+
+if (!$do_thread) {
+    require IO::Pipe;
+    require IO::Select;
+}
 use Moose;
 use POSIX ':sys_wait_h';
 use Storable;
@@ -111,9 +114,10 @@ die (inside the C<waitall()> method).
 The PID of the child is returned to the parent process when
 this method is executed.
 
-On Windows with threaded Perl, threads instead of forks are used.
-See C<thread> for the caveats that apply.  The TID instead of PID
-will be returned in this case.
+Note: on Windows with threaded Perl, threads instead of forks are used.
+See C<thread> for the caveats that apply.  The PID returned is instead
+a meaningless (outside of this module) counter, not associated with any
+Windows thread identifier.
 
 =cut
 
@@ -358,9 +362,7 @@ any thread unsafe library is going to cause problems with Windows.  In
 addition, all the normal thread caveats apply - see L<threads> for more
 information.
 
-Also, on Windows, we use C<POSIX::_exit()> instead of C<exit()> in the
-thread, do to some Windows differences.  This means that file descriptors
-are not automatically flushed at exit!  Please make sure you close all file
-descriptors before exiting your child!
+In addition, this code is unlikely to function properly on a Windows without
+threaded Perl.
 
 =cut
