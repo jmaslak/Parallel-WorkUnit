@@ -19,8 +19,8 @@ if ($do_thread) { eval 'use Thread::Queue;'; }
 
 use Carp;
 
+use IO::Pipe;
 if (!$do_thread) {
-    require IO::Pipe;
     require IO::Select;
 }
 use Moose;
