@@ -108,7 +108,8 @@ sub async {
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
-            callback => $callback
+            callback => $callback,
+            caller   => [ caller() ]
         };
 
         return $pid;
@@ -224,10 +225,14 @@ sub _send {
     if ( $#_ != 3 ) { confess 'invalid call'; }
     my ( $self, $fh, $type, $data ) = @_;
 
+    my $msg = Storable::freeze( \$data );
+
+    if (!defined($msg)) {
+        die 'freeze() returned undef for child return value';
+    }
+
     $fh->write($type);
     $fh->write("\n");
-
-    my $msg = Storable::freeze( \$data );
 
     $fh->write(length($msg));
     $fh->write("\n");
@@ -269,13 +274,15 @@ sub _read_result {
 
     my $data = ${ Storable::thaw($result) };
 
+    my $caller = $self->_subprocs()->{$child}{caller};
     delete $self->_subprocs()->{$child};
     $fh->close();
 
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
     } else {
-        die("Child died with error: $data");
+        die("Child (created at " . $caller->[1] . " line " . $caller->[2] .
+            ") died with error: $data");
     }
 }
 
