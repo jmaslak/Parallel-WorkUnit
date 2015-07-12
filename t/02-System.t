@@ -8,7 +8,9 @@ use v5.14;
 # All Rights Reserved - See License
 #
 
-# This tests the Parallel::WorkUnit functionality
+# This tests a bug reported by SREZIC - system SIGCHLD's were getting
+# improperly reaped by the SIGCHLD handler.  This test validates that
+# the exit value of a system execution is preserved.
 
 use strict;
 use warnings;
