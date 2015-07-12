@@ -100,8 +100,7 @@ sub async {
     if ( $#_ != 2 ) { confess 'invalid call'; }
     my ( $self, $sub, $callback ) = @_;
 
-    my $pipe     = IO::Pipe->new();
-    my $exitpipe = IO::Pipe->new();
+    my $pipe = IO::Pipe->new();
 
     my $pid = fork;
     if ( !defined($pid) ) { die "Fork failed: $!"; }
@@ -110,12 +109,9 @@ sub async {
 
         # We are in the parent process
         $pipe->reader();
-        $exitpipe->writer();
-        $exitpipe->autoflush(1);
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
-            exitfh   => $exitpipe,
             callback => $callback
         };
 
@@ -126,14 +122,13 @@ sub async {
         # We are in the child process
         $pipe->writer();
         $pipe->autoflush(1);
-        $exitpipe->reader();
 
         try {
             my $result = $sub->();
-            $self->_send_result( $pipe, $exitpipe, $result );
+            $self->_send_result( $pipe, $result );
         } catch($err) {
 
-            $self->_send_error( $pipe, $exitpipe, $err );
+            $self->_send_error( $pipe, $err );
         };
 
         exit();
@@ -216,22 +211,22 @@ sub wait {
 }
 
 sub _send_result {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $exitpipe, $msg ) = @_;
+    if ( $#_ != 2 ) { confess 'invalid call'; }
+    my ( $self, $fh, $msg ) = @_;
 
-    $self->_send( $fh, $exitpipe, 'RESULT', $msg );
+    $self->_send( $fh, 'RESULT', $msg );
 }
 
 sub _send_error {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $exitpipe, $err ) = @_;
+    if ( $#_ != 2 ) { confess 'invalid call'; }
+    my ( $self, $fh, $err ) = @_;
 
-    $self->_send( $fh, $exitpipe, 'ERROR', $err );
+    $self->_send( $fh, 'ERROR', $err );
 }
 
 sub _send {
-    if ( $#_ != 4 ) { confess 'invalid call'; }
-    my ( $self, $fh, $exitpipe, $type, $data ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $type, $data ) = @_;
 
     $fh->write($type);
     $fh->write("\n");
@@ -245,8 +240,6 @@ sub _send {
 
     $fh->write($msg);
 
-    my $j = <$exitpipe>;
-    $exitpipe->close();
     $fh->close();
 }
 
@@ -254,9 +247,8 @@ sub _read_result {
     if ( $#_ != 1 ) { confess 'invalid call'; }
     my ( $self, $child ) = @_;
 
-    my $cinfo  = $self->_subprocs()->{$child};
-    my $fh     = $cinfo->{fh};
-    my $exitfh = $cinfo->{exitfh};
+    my $cinfo = $self->_subprocs()->{$child};
+    my $fh    = $cinfo->{fh};
 
     my $type = <$fh>;
     if ( !defined($type) ) { die 'Could not read child data'; }
@@ -278,13 +270,11 @@ sub _read_result {
         $ret = $fh->read( $part, $s );
         if ( defined($ret) ) { $result .= $part; }
     }
-    print $exitfh "DONE\n";
 
     my $data = ${ Storable::thaw($result) };
 
     delete $self->_subprocs()->{$child};
     $fh->close();
-    $exitfh->close();
 
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
