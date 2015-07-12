@@ -3,8 +3,7 @@
 # All Rights Reserved - See License
 #
 
-use v5.14;
-use utf8;
+use v5.8;
 
 package Parallel::WorkUnit;
 
@@ -14,13 +13,19 @@ use strict;
 use warnings;
 use autodie;
 
+use TryCatch;
+my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
+if ($do_thread) { eval 'use Thread::Queue;'; }
+
 use Carp;
+
 use IO::Pipe;
-use IO::Select;
+if (!$do_thread) {
+    require IO::Select;
+}
 use Moose;
 use POSIX ':sys_wait_h';
 use Storable;
-use TryCatch;
 
 use namespace::autoclean;
 
@@ -62,10 +67,28 @@ has '_subprocs' => (
     init_arg => undef
 );
 
+# This only gets used on Win32.
+has '_queue' => (
+    is       => 'rw',
+    init_arg => undef
+);
+
+# This only gets used on Win32
+has '_count' => (
+    is       => 'rw',
+    isa      => 'Int',
+    init_arg => undef,
+    default  => 1
+);
+
 sub BUILD {
     my $self = shift;
 
     $self->_subprocs( {} );
+
+    if ($do_thread) {
+        $self->_queue( Thread::Queue->new() );
+    }
 }
 
 =method async( sub { ... }, \&callback )
@@ -91,6 +114,11 @@ die (inside the C<waitall()> method).
 The PID of the child is returned to the parent process when
 this method is executed.
 
+Note: on Windows with threaded Perl, threads instead of forks are used.
+See C<thread> for the caveats that apply.  The PID returned is instead
+a meaningless (outside of this module) counter, not associated with any
+Windows thread identifier.
+
 =cut
 
 sub async {
@@ -99,41 +127,55 @@ sub async {
 
     my $pipe = IO::Pipe->new();
 
-    my $pid = fork;
-    if ( !defined($pid) ) { die "Fork failed: $!"; }
+    my ($pid, $thr);
+    if ($do_thread) {
+        $pid = $self->_count();
+        $self->_count($pid + 1);
+
+        $thr = threads->create( sub { $self->_child($sub, $pipe, $pid); } );
+        if ( !defined($thr) ) { die "thread creation failed: $!"; }
+    } else {
+        $pid = fork();
+    }
 
     if ($pid) {
-
         # We are in the parent process
         $pipe->reader();
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
-            callback => $callback
+            callback => $callback,
+            caller   => [ caller() ],
+            thread   => $thr
         };
 
         return $pid;
 
     } else {
+        $self->_child($sub, $pipe, undef);
+    }
+}
 
-        # We are in the child process
-        $pipe->writer();
-        $pipe->autoflush(1);
+sub _child {
+    if (scalar(@_) != 4) { confess 'invalid call'; }
+    my ($self, $sub, $pipe, $pid) = @_;
 
-        try {
-            my $result = $sub->();
-            $self->_send_result( $pipe, $result );
-        } catch($err) {
+    # We are in the child process
+    $pipe->writer();
+    $pipe->autoflush(1);
 
-            $self->_send_error( $pipe, $err );
-        };
+    try {
+        my $result = $sub->();
+        $self->_send_result( $pipe, $result, $pid );
+    } catch($err) {
+        $self->_send_error( $pipe, $err, $pid );
+    };
 
-        # Windows doesn't do fork(), it does threads...
-        if ($^O eq 'MSWin32') {
-            POSIX::_exit(0);
-        } else {
-            exit();
-        }
+    # Windows doesn't do fork(), it does threads...
+    if ($do_thread) {
+        return 1;
+    } else {
+        exit();
     }
 }
 
@@ -156,17 +198,29 @@ sub waitall {
     my $sp = $self->_subprocs();
     if ( !keys(%$sp) ) { return; }
 
-    my $s = IO::Select->new();
-    foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
 
-    my @ready = $s->can_read;
+    if ($do_thread) {
+        my $child = $self->_queue()->dequeue(1);
 
-    foreach my $fh (@ready) {
-        foreach my $child ( keys(%$sp) ) {
-            if ( defined($fh->fileno())) {
-                if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
-                    $self->_read_result($child);
-                    waitpid($child, 0);
+        my $thr = $self->_subprocs()->{$child}{thread};
+        $self->_read_result($child);
+
+        $thr->join();
+    } else {
+        my $s = IO::Select->new();
+        foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
+
+        my @ready = $s->can_read();
+
+        foreach my $fh (@ready) {
+            foreach my $child ( keys(%$sp) ) {
+                if ( defined($fh->fileno())) {
+                    if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
+                        my $thr = $self->_subprocs()->{$child}{thread};
+                        $self->_read_result($child);
+
+                        waitpid($child, 0);
+                    }
                 }
             }
         }
@@ -200,35 +254,48 @@ sub wait {
         return;
     }
 
+    my $thr = $self->_subprocs()->{$pid}{thread};
     my $result = $self->_read_result($pid);
 
-    waitpid($pid, 0);
+    if ($do_thread) {
+        $thr->join();
+    } else {
+        waitpid($pid, 0);
+    }
 
     return $result;
 }
 
 sub _send_result {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $msg ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $msg, $pid ) = @_;
 
-    $self->_send( $fh, 'RESULT', $msg );
+    $self->_send( $fh, 'RESULT', $msg, $pid );
 }
 
 sub _send_error {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $fh, $err ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $err, $pid ) = @_;
 
-    $self->_send( $fh, 'ERROR', $err );
+    $self->_send( $fh, 'ERROR', $err, $pid );
 }
 
 sub _send {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $type, $data ) = @_;
+    if ( $#_ != 4 ) { confess 'invalid call'; }
+    my ( $self, $fh, $type, $data, $pid ) = @_;
+
+    my $msg = Storable::freeze( \$data );
+
+    if (!defined($msg)) {
+        die 'freeze() returned undef for child return value';
+    }
+
+    if ($do_thread) {
+        $self->_queue()->enqueue($pid);
+    }
 
     $fh->write($type);
     $fh->write("\n");
-
-    my $msg = Storable::freeze( \$data );
 
     $fh->write(length($msg));
     $fh->write("\n");
@@ -270,13 +337,17 @@ sub _read_result {
 
     my $data = ${ Storable::thaw($result) };
 
+    my $caller = $self->_subprocs()->{$child}{caller};
+    my $thr = $self->_subprocs()->{$child}{thread};
     delete $self->_subprocs()->{$child};
     $fh->close();
 
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
     } else {
-        die("Child died with error: $data");
+        if ($do_thread) { $thr->join(); }
+        die("Child (created at " . $caller->[1] . " line " . $caller->[2] .
+            ") died with error: $data");
     }
 }
 
@@ -291,8 +362,7 @@ any thread unsafe library is going to cause problems with Windows.  In
 addition, all the normal thread caveats apply - see L<threads> for more
 information.
 
-Also, on Windows, we use C<POSIX::_exit()> instead of C<exit()> in the
-thread, do to some Windows differences.  This means that file descriptors
-are not automatically flushed at exit!  Please make sure you close all file
-descriptors before exiting your child!
+In addition, this code is unlikely to function properly on a Windows without
+threaded Perl.
 
+=cut
