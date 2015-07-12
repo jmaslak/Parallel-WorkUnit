@@ -1,0 +1,6 @@
+1.001 - July 12, 2015
+Joel C. Maslak <jmaslak@antelope.net>
+ * Changed behavior for reads, so that the return value can be ready by
+   multiple read() calls.  This aids robustness if a signal comes in at
+   a bad time, particularly in Perl 5.14.
+
