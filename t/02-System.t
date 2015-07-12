@@ -1,8 +1,6 @@
 #!/usr/bin/perl -T
 # Yes, we want to make sure things work in taint mode
 
-use v5.14;
-
 #
 # Copyright (C) 2015 Joel Maslak
 # All Rights Reserved - See License
@@ -35,11 +33,19 @@ ok(defined($wu), "Constructer returned object");
 # We're going to spawn 50 children and test the return value
 my $result;
 $ENV{PATH} = '';
-$wu->async(
-    sub { system('/usr/bin/true'); return $? },
-    sub { $result = shift; }
-);
+my $true;
+if (-f '/bin/true') { $true = '/bin/true'; }
+if (-f '/usr/bin/true') { $true = '/usr/bin/true'; }
 
-$wu->waitall();
-is($result, 0, 'System calls properly function');
+SKIP: {
+    skip("Can't find true binary", 1) unless defined($true);
+
+    $wu->async(
+        sub { system($true); return $? },
+        sub { $result = shift; }
+    );
+
+    $wu->waitall();
+    is($result, 0, 'System calls properly function');
+}
 

@@ -3,8 +3,7 @@
 # All Rights Reserved - See License
 #
 
-use v5.14;
-use utf8;
+use v5.8;
 
 package Parallel::WorkUnit;
 

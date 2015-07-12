@@ -1,8 +1,6 @@
 #!/usr/bin/perl -T
 # Yes, we want to make sure things work in taint mode
 
-use v5.14;
-
 #
 # Copyright (C) 2015 Joel Maslak
 # All Rights Reserved - See License
