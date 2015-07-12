@@ -13,13 +13,15 @@ use strict;
 use warnings;
 use autodie;
 
+use TryCatch;
+my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
+
 use Carp;
 use IO::Pipe;
 use IO::Select;
 use Moose;
 use POSIX ':sys_wait_h';
 use Storable;
-use TryCatch;
 
 use namespace::autoclean;
 
@@ -90,6 +92,10 @@ die (inside the C<waitall()> method).
 The PID of the child is returned to the parent process when
 this method is executed.
 
+On Windows with threaded Perl, threads instead of forks are used.
+See C<thread> for the caveats that apply.  The TID instead of PID
+will be returned in this case.
+
 =cut
 
 sub async {
@@ -98,42 +104,55 @@ sub async {
 
     my $pipe = IO::Pipe->new();
 
-    my $pid = fork;
-    if ( !defined($pid) ) { die "Fork failed: $!"; }
+    my ($pid, $thr);
+    if ($do_thread) {
+        $thr = threads->create( sub { $self->_child($sub, $pipe); } );
+        if ( !defined($thr) ) { die "Fork failed: $!"; }
+
+        $pid = $thr->tid();
+    } else {
+        $pid = fork();
+        if ( !defined($pid) ) { die "Fork failed: $!"; }
+    }
 
     if ($pid) {
-
         # We are in the parent process
         $pipe->reader();
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
             callback => $callback,
-            caller   => [ caller() ]
+            caller   => [ caller() ],
+            thread   => $thr
         };
 
         return $pid;
 
     } else {
+        $self->_child($sub, $pipe);
+    }
+}
 
-        # We are in the child process
-        $pipe->writer();
-        $pipe->autoflush(1);
+sub _child {
+    if (scalar(@_) != 3) { confess 'invalid call'; }
+    my ($self, $sub, $pipe) = @_;
 
-        try {
-            my $result = $sub->();
-            $self->_send_result( $pipe, $result );
-        } catch($err) {
+    # We are in the child process
+    $pipe->writer();
+    $pipe->autoflush(1);
 
-            $self->_send_error( $pipe, $err );
-        };
+    try {
+        my $result = $sub->();
+        $self->_send_result( $pipe, $result );
+    } catch($err) {
+        $self->_send_error( $pipe, $err );
+    };
 
-        # Windows doesn't do fork(), it does threads...
-        if ($^O eq 'MSWin32') {
-            POSIX::_exit(0);
-        } else {
-            exit();
-        }
+    # Windows doesn't do fork(), it does threads...
+    if ($do_thread) {
+        return 1;
+    } else {
+        exit();
     }
 }
 
@@ -165,8 +184,14 @@ sub waitall {
         foreach my $child ( keys(%$sp) ) {
             if ( defined($fh->fileno())) {
                 if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
+                    my $thr = $self->_subprocs()->{$child}{thread};
                     $self->_read_result($child);
-                    waitpid($child, 0);
+
+                    if ($do_thread) {
+                        $thr->join();
+                    } else {
+                        waitpid($child, 0);
+                    }
                 }
             }
         }
@@ -200,9 +225,14 @@ sub wait {
         return;
     }
 
+    my $thr = $self->_subprocs()->{$pid}{thread};
     my $result = $self->_read_result($pid);
 
-    waitpid($pid, 0);
+    if ($do_thread) {
+        $thr->join();
+    } else {
+        waitpid($pid, 0);
+    }
 
     return $result;
 }
@@ -275,12 +305,14 @@ sub _read_result {
     my $data = ${ Storable::thaw($result) };
 
     my $caller = $self->_subprocs()->{$child}{caller};
+    my $thr = $self->_subprocs()->{$child}{thread};
     delete $self->_subprocs()->{$child};
     $fh->close();
 
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
     } else {
+        if ($do_thread) { $thr->join(); }
         die("Child (created at " . $caller->[1] . " line " . $caller->[2] .
             ") died with error: $data");
     }
@@ -302,3 +334,4 @@ thread, do to some Windows differences.  This means that file descriptors
 are not automatically flushed at exit!  Please make sure you close all file
 descriptors before exiting your child!
 
+=cut
