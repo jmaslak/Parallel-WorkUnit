@@ -2,6 +2,8 @@
 Joel C. Maslak <jmaslak@antelope.net>
  * Don't call standard exit() on Windows, use POSIX:_exit() instead
  * Don't use SIG{CHLD} = 'IGNORE' (bug 105823, reported by SREZIC)
+ * Relaxed Perl minimum version requirements (bug 105824, reported by
+   SREZIC)
 
 1.001 - July 12, 2015
 Joel C. Maslak <jmaslak@antelope.net>
