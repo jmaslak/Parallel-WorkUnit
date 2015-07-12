@@ -131,7 +131,12 @@ sub async {
             $self->_send_error( $pipe, $err );
         };
 
-        exit();
+        # Windows doesn't do fork(), it does threads...
+        if ($^O eq 'MSWin32') {
+            POSIX::_exit(0);
+        } else {
+            exit();
+        }
     }
 }
 
@@ -294,4 +299,16 @@ sub _read_result {
 __PACKAGE__->meta->make_immutable;
 
 1;
+
+=head1 BUGS
+
+Windows doesn't do C<fork()>, but emulates it with threads.  As a result,
+any thread unsafe library is going to cause problems with Windows.  In
+addition, all the normal thread caveats apply - see L<threads> for more
+information.
+
+Also, on Windows, we use C<POSIX::_exit()> instead of C<exit()> in the
+thread, do to some Windows differences.  This means that file descriptors
+are not automatically flushed at exit!  Please make sure you close all file
+descriptors before exiting your child!
 
