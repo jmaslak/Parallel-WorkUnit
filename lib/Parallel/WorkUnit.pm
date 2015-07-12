@@ -45,8 +45,6 @@ any developer's time to look through those and choose the best one.
 
 =head1 SIDE EFFECTS
 
-This module, when instantiated, sets the SIG{CHLD} handler to 'IGNORE'.
-This means that children will be automatically reaped on most systems.
 In addition, the C<wait()> and C<waitall()> methods will attempt to
 reap any outstanding children.
 
@@ -68,7 +66,6 @@ sub BUILD {
     my $self = shift;
 
     $self->_subprocs( {} );
-    $SIG{CHLD} = 'IGNORE';
 }
 
 =method async( sub { ... }, \&callback )
@@ -150,10 +147,6 @@ method will return.
 If a child dies unexpectedly, this method will C<die()> and propagate a
 modified exception.
 
-This method has a side-effect of reaping any children that haven't yet
-been reaped.  If you aren't messing with C<$SIG{CHLD}>, you do not need
-to worry about this.
-
 =cut
 
 sub waitall {
@@ -173,15 +166,12 @@ sub waitall {
             if ( defined($fh->fileno())) {
                 if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
                     $self->_read_result($child);
+                    waitpid($child, 0);
                 }
             }
         }
     }
    
-    # Just in case SIG{CHLD}="IGNORE" doesn't cause the children to
-    # be reaped. 
-    while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 ) { }
-
     # Tail recursion
     goto &waitall;
 }
@@ -196,10 +186,6 @@ If C<wait()> is called on a process that is already done
 executing, it simply returns.  Otherwise, it waits until the
 child process's work unit is complete and executes the callback
 routine, then returns.
-
-This method has a side-effect of reaping any children that haven't yet
-been reaped.  If you aren't messing with C<$SIG{CHLD}>, you do not need
-to worry about this.
 
 =cut
 
@@ -216,9 +202,7 @@ sub wait {
 
     my $result = $self->_read_result($pid);
 
-    # Just in case SIG{CHLD}="IGNORE" doesn't cause the children to
-    # be reaped. 
-    while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 ) { }
+    waitpid($pid, 0);
 
     return $result;
 }

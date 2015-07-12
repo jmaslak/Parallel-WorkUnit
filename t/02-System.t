@@ -1,0 +1,43 @@
+#!/usr/bin/perl -T
+# Yes, we want to make sure things work in taint mode
+
+use v5.14;
+
+#
+# Copyright (C) 2015 Joel Maslak
+# All Rights Reserved - See License
+#
+
+# This tests the Parallel::WorkUnit functionality
+
+use strict;
+use warnings;
+use autodie;
+
+use Carp;
+use Test::More tests => 3;
+
+# Set Timeout
+local $SIG{ALRM} = sub { die "timeout\n"; };
+alarm 120; # It would be nice if we did this a better way, since
+           # strictly speaking, 120 seconds isn't necessarily
+           # indicative of failure if running this on a VERY
+           # slow machine.
+           # But hopefully nobody has that slow of a machine!
+
+# Instantiate the object
+require_ok('Parallel::WorkUnit');
+my $wu = Parallel::WorkUnit->new();
+ok(defined($wu), "Constructer returned object");
+
+# We're going to spawn 50 children and test the return value
+my $result;
+$ENV{PATH} = '';
+$wu->async(
+    sub { system('/usr/bin/true'); return $? },
+    sub { $result = shift; }
+);
+
+$wu->waitall();
+is($result, 0, 'System calls properly function');
+
