@@ -68,7 +68,6 @@ sub BUILD {
     my $self = shift;
 
     $self->_subprocs( {} );
-    # $SIG{CHLD} = \&_sigchld;
     $SIG{CHLD} = 'IGNORE';
 }
 
