@@ -20,9 +20,7 @@ if ($do_thread) { eval 'use Thread::Queue;'; }
 use Carp;
 
 use IO::Pipe;
-if (!$do_thread) {
-    require IO::Select;
-}
+use IO::Select;
 use Moose;
 use POSIX ':sys_wait_h';
 use Storable;
@@ -47,11 +45,6 @@ of data back to the parent process.
 
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
-
-=head1 SIDE EFFECTS
-
-In addition, the C<wait()> and C<waitall()> methods will attempt to
-reap any outstanding children.
 
 =cut
 
