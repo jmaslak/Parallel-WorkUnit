@@ -1,3 +1,7 @@
+1.004 - July 13, 2015
+Joel C. Maslak <jmaslak@antelope.net>
+ * Correct missing tests in 1.003
+
 1.003 - July 13, 2015
 Joel C. Maslak <jmaslak@antelope.net>
  * This version doesn't have any functionality changes from 1.002
