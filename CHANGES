@@ -1,3 +1,8 @@
+1.005 - July 15, 2015
+ * This version doesn't have any functionality changes from 1.002
+ * This beats up the smoke tests hosts (particularly Windows and
+   Solaris) a lot less, by spawning fewer processes during tests.
+
 1.004 - July 13, 2015
 Joel C. Maslak <jmaslak@antelope.net>
  * Correct missing tests in 1.003

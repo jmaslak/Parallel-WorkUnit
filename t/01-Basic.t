@@ -13,7 +13,7 @@ use warnings;
 use autodie;
 
 use Carp;
-use Test::More tests => 114;
+use Test::More tests => 34;
 use Test::Exception;
 
 # Set Timeout
@@ -29,9 +29,9 @@ require_ok('Parallel::WorkUnit');
 my $wu = Parallel::WorkUnit->new();
 ok(defined($wu), "Constructer returned object");
 
-# We're going to spawn 50 children and test the return value
+# We're going to spawn 10 children and test the return value
 my %RESULTS;
-my $PROCS = 50;
+my $PROCS = 10;
 for ( 0 .. $PROCS-1 ) {
     $wu->async(
         sub { return $_; },
