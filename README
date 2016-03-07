@@ -1,0 +1,100 @@
+NAME
+    Parallel::WorkUnit - Provide easy-to-use forking with ability to pass
+    back data
+
+VERSION
+    version 1.006
+
+SYNOPSIS
+      my $wu = Parallel::WorkUnit->new();
+      $wu->async( sub { ... }, \&callback );
+
+      $wu->waitall();
+
+DESCRIPTION
+    This is a very simple forking implementation of parallelism, with the
+    ability to pass data back from the asyncronous child process in a
+    relatively efficient way (with the limitation of using a pipe to pass
+    the information, serialized, back). It was designed to be very simple
+    for a developer to use, with the ability to pass reasonably large
+    amounts of data back to the parent process.
+
+    There are many other Parallel::* applications in CPAN - it would be
+    worth any developer's time to look through those and choose the best
+    one.
+
+METHODS
+  new
+    Create a new workunit class.
+
+  async( sub { ... }, \&callback )
+    Spawns work on a new forked process. The forked process inherits all
+    Perl state from the parent process, as would be expected with a standard
+    "fork()" call. The child shares nothing with the parent, other than the
+    return value of the work done.
+
+    The work is specified either as a subroutine reference or an anonymous
+    sub ("sub { ... }") and should return a scalar. Any scalar that
+    Storable's "freeze()" method can deal with is acceptable (for instance,
+    a hash reference or "undef").
+
+    When the work is completed, it serializes the result and streams it back
+    to the parent process via a pipe. The parent, in a "waitall()" call,
+    will call the callback function with the unserialized return value.
+
+    Should the child process "die", the parent process will also die (inside
+    the "waitall()" method).
+
+    The PID of the child is returned to the parent process when this method
+    is executed.
+
+    Note: on Windows with threaded Perl, threads instead of forks are used.
+    See "thread" for the caveats that apply. The PID returned is instead a
+    meaningless (outside of this module) counter, not associated with any
+    Windows thread identifier.
+
+  waitall()
+    Called from the parent method while waiting for the children to exit.
+    This method handles children that "die()" or return a serializable data
+    structure. When all children return, this method will return.
+
+    If a child dies unexpectedly, this method will "die()" and propagate a
+    modified exception.
+
+  waitone()
+    This method similarly to "waitall()", but only waits for a single PID.
+    It will return after any PID exits.
+
+    If this method is called when there is no processes executing, it will
+    simply return undef. Otherwise, it will wait and then return 1.
+
+  wait($pid)
+    This functions simiarly to "waitone()", but waits only for a specific
+    PID. See the "waitone()" documentation above for details.
+
+    If "wait()" is called on a process that is already done executing, it
+    simply returns. Otherwise, it waits until the child process's work unit
+    is complete and executes the callback routine, then returns.
+
+  count()
+    This method returns the number of currently outstanding threads (in
+    either a running state or a waiting to send their output).
+
+BUGS
+    Windows doesn't do "fork()", but emulates it with threads. As a result,
+    any thread unsafe library is going to cause problems with Windows. In
+    addition, all the normal thread caveats apply - see threads for more
+    information.
+
+    In addition, this code is unlikely to function properly on a Windows
+    without threaded Perl.
+
+AUTHOR
+    Joel Maslak <jmaslak@antelope.net>
+
+COPYRIGHT AND LICENSE
+    This software is copyright (c) 2015,2016 by Joel Maslak.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+
