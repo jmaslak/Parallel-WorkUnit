@@ -1,4 +1,14 @@
+1.006 - Mar 2, 2016
+Joel C. Maslak <jmaslak@antelope.net>
+ * Add waitone() method, which allows you to wait for one and exactly
+   one child thread to return.  This is useful in building worker
+   pools.
+ * Add count() method, which returns the number of outstanding
+   threads running or waiting to send output.  This is also usesful
+   for building worker pools.
+
 1.005 - July 15, 2015
+Joel C. Maslak <jmaslak@antelope.net>
  * This version doesn't have any functionality changes from 1.002
  * This beats up the smoke tests hosts (particularly Windows and
    Solaris) a lot less, by spawning fewer processes during tests.

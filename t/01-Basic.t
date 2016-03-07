@@ -13,7 +13,7 @@ use warnings;
 use autodie;
 
 use Carp;
-use Test::More tests => 34;
+use Test::More tests => 50;
 use Test::Exception;
 
 # Set Timeout
@@ -28,6 +28,7 @@ alarm 120; # It would be nice if we did this a better way, since
 require_ok('Parallel::WorkUnit');
 my $wu = Parallel::WorkUnit->new();
 ok(defined($wu), "Constructer returned object");
+is($wu->count, 0, "no processes running before spawning any");
 
 # We're going to spawn 10 children and test the return value
 my %RESULTS;
@@ -37,13 +38,20 @@ for ( 0 .. $PROCS-1 ) {
         sub { return $_; },
         \&cb
     );
+    is($wu->count, 1+$_, 1+$_ . " workers are executing");
 }
+
+my $r = $wu->waitone();
+ok(defined($r), "waitone() returned a defined value");
+ok( ($r >= 0) && ($r < $PROCS), "waitone() returned a valid return value");
+is($wu->count, $PROCS-1, "waitone() properly reaped one process");
 
 $wu->waitall();
 
 for ( 0 .. $PROCS-1 ) {
     ok(exists($RESULTS{$_}), "Worker First Exec $_ returned properly");
 }
+is($wu->count, 0, "no processes running after waitall()");
 
 
 # We make sure we can call this twice without issues
@@ -137,6 +145,7 @@ $wu->wait($pid);
 pass("Duplicate wait() call exits properly");
 $wu->waitall();
 pass("Unnecessary waitall() call exits properly");
+ok(!defined($wu->waitone()), 'Unnecessary waitone() call exits properly');
 
 
 # The below subs are the callbacks

@@ -188,9 +188,27 @@ sub waitall {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
 
-    my $sp = $self->_subprocs();
-    if ( !keys(%$sp) ) { return; }
+    # Tail recursion
+    if ( $self->waitone() ) { goto &waitall }
+}
 
+=method waitone()
+
+This method similarly to C<waitall()>, but only waits for
+a single PID.  It will return after any PID exits.
+
+If this method is called when there is no processes executing,
+it will simply return undef. Otherwise, it will wait and then
+return 1.
+
+=cut
+
+sub waitone {
+    if ( $#_ != 0 ) { confess 'invalid call'; }
+    my ($self) = @_;
+    
+    my $sp = $self->_subprocs();
+    if ( !keys(%$sp) ) { return undef; }
 
     if ($do_thread) {
         my $child = $self->_queue()->dequeue(1);
@@ -213,20 +231,22 @@ sub waitall {
                         $self->_read_result($child);
 
                         waitpid($child, 0);
+
+                        return 1;  # We don't want to read more than one!
                     }
                 }
             }
         }
     }
-   
-    # Tail recursion
-    goto &waitall;
+
+    # We should never get here
+    return undef;
 }
 
 =method wait($pid)
 
-This functions simiarly to C<waitall()>, but only waits for
-a single PID.  See the C<waitall()> documentation above
+This functions simiarly to C<waitone()>, but waits only for
+a specific PID.  See the C<waitone()> documentation above
 for details.
 
 If C<wait()> is called on a process that is already done
@@ -257,6 +277,22 @@ sub wait {
     }
 
     return $result;
+}
+
+=method count()
+
+This method returns the number of currently outstanding
+threads (in either a running state or a waiting to send their
+output).
+
+=cut
+
+sub count {
+    if ( $#_ != 0 ) { confess 'invalid call'; }
+    my ($self) = @_;
+    
+    my $sp = $self->_subprocs();
+    return scalar(keys %$sp);
 }
 
 sub _send_result {
