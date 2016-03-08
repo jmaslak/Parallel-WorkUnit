@@ -1,3 +1,11 @@
+1.007 - Mar 7, 2016
+Joel C. Maslak <jmaslak@antelope.net>
+ * Win32: Fix Win32 compatibility issue introduced in 1.006.
+   (Thanks, CPAN Testers!)
+ * Win32: waitone() no longer waits only for the first running
+   thread to stop but waits instead for the first finishing
+   thread.
+
 1.006 - Mar 2, 2016
 Joel C. Maslak <jmaslak@antelope.net>
  * Add waitone() method, which allows you to wait for one and exactly
