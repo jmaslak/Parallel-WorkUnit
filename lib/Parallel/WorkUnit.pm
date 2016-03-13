@@ -210,25 +210,39 @@ sub waitone {
     my $sp = $self->_subprocs();
     if ( !keys(%$sp) ) { return undef; }
 
-    my $s = IO::Select->new();
-    foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
+    if ($do_thread) {
+        # On Windows
+        #
+        my $child = $self->_queue()->dequeue();
 
-    my @ready = $s->can_read();
+        my $thr = $self->_subprocs()->{$child}{thread};
+        $self->_read_result($child);
+        $thr->join();
 
-    foreach my $fh (@ready) {
-        foreach my $child ( keys(%$sp) ) {
-            if ( defined($fh->fileno())) {
-                if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
-                    my $thr = $self->_subprocs()->{$child}{thread};
-                    $self->_read_result($child);
+        return 1;
+    } else {
+        # On everything but Windows
+        #
+        my $s = IO::Select->new();
+        foreach ( keys(%$sp) ) { $s->add( $sp->{$_}{fh} ); }
 
-                    if ($do_thread) {
-                        $thr->join();
-                    } else {
-                        waitpid($child, 0);
+        my @ready = $s->can_read();
+
+        foreach my $fh (@ready) {
+            foreach my $child ( keys(%$sp) ) {
+                if ( defined($fh->fileno())) {
+                    if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
+                        my $thr = $self->_subprocs()->{$child}{thread};
+                        $self->_read_result($child);
+
+                        if ($do_thread) {
+                            $thr->join();
+                        } else {
+                            waitpid($child, 0);
+                        }
+
+                        return 1;  # We don't want to read more than one!
                     }
-
-                    return 1;  # We don't want to read more than one!
                 }
             }
         }
