@@ -1,3 +1,9 @@
+1.008 - Mar 13, 2016
+Joel C. Maslak <jmaslak@antelope.net>
+ * Win32: Really fix the compatibility issue.  There is no
+   select() on Win32 that works with sockets, so we simulate
+   this with Thread::Queue (Thanks, CPAN Testers!)
+
 1.007 - Mar 7, 2016
 Joel C. Maslak <jmaslak@antelope.net>
  * Win32: Fix Win32 compatibility issue introduced in 1.006.
