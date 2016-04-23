@@ -13,7 +13,7 @@ use strict;
 use warnings;
 use autodie;
 
-use TryCatch;
+use Try::Tiny;
 my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
 if ($do_thread) { eval 'use Thread::Queue;'; }
 
@@ -160,8 +160,8 @@ sub _child {
     try {
         my $result = $sub->();
         $self->_send_result( $pipe, $result, $pid );
-    } catch($err) {
-        $self->_send_error( $pipe, $err, $pid );
+    } catch {
+        $self->_send_error( $pipe, $_, $pid );
     };
 
     # Windows doesn't do fork(), it does threads...

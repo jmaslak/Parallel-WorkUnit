@@ -1,3 +1,8 @@
+1.009 - Apr 23, 2016
+ * Switched from TryCatch to Try::Tiny to maintain compatibility
+   with Perl 5.24.0-RC1 (TryCatch depends on Scope::Upper which
+   was broken by perl core changes)
+
 1.008 - Mar 13, 2016
 Joel C. Maslak <jmaslak@antelope.net>
  * Win32: Really fix the compatibility issue.  There is no
