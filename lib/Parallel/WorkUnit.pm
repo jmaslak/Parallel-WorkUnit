@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015 J. Maslak
+# Copyright (C) 2015-2017 Joelle Maslak
 # All Rights Reserved - See License
 #
 
@@ -22,6 +22,7 @@ use Carp;
 use IO::Pipe;
 use IO::Select;
 use Moose;
+use Moose::Util::TypeConstraints;
 use POSIX ':sys_wait_h';
 use Storable;
 
@@ -32,6 +33,10 @@ use namespace::autoclean;
   my $wu = Parallel::WorkUnit->new();
   $wu->async( sub { ... }, \&callback );
 
+  $wu->waitall();
+
+  $wu->max_children(5);
+  $wu->queue( sub { ... }, \&callback );
   $wu->waitall();
 
 =head1 DESCRIPTION
@@ -48,11 +53,31 @@ any developer's time to look through those and choose the best one.
 
 =cut
 
-=method new
+subtype 'Parallel::WorkUnit::PositiveInt', as 'Int',
+  where { $_ > 0 },
+  message { "The number you provided, $_, was not a positive number" };
 
-Create a new workunit class.
+=attr max_children
+
+  $wu->max_children(5);
+  $wu->max_children(undef);
+
+  say "Max number of children: " . $wu->max_children();
+
+If set to a value other than undef, limits the number of outstanding
+queue children (created by the C<queue()> method) that can be executing
+at any given time.  This defaults to 5.
+
+Calling without any parameters will return the number of children.
 
 =cut
+
+has 'max_children' => (
+    is      => 'rw',
+    isa     => 'Maybe[Parallel::WorkUnit::PositiveInt]',
+    default => 5,
+    trigger => sub { $_[0]->_start_queued_children() },
+);
 
 has '_subprocs' => (
     is       => 'rw',
@@ -73,6 +98,25 @@ has '_count' => (
     init_arg => undef,
     default  => 1
 );
+
+# Children queued
+has '_queued_children' => (
+    is       => 'rw',
+    isa      => 'ArrayRef[ArrayRef[Coderef]]',
+    init_arg => undef,
+    default  => sub { [] },
+);
+
+=method new
+
+Create a new workunit class.  Optionally, takes a list that corresponds
+to a hashref, in the form of key and value.  This accepts the key
+C<max_children>, which, if present (and not undef) will limit the
+number of spawned subprocesses that can be active when using the
+C<queue()> method.  Defaults to 5.  See the C<max_children> method
+for additional information.
+
+=cut
 
 sub BUILD {
     my $self = shift;
@@ -107,6 +151,11 @@ die (inside the C<waitall()> method).
 The PID of the child is returned to the parent process when
 this method is executed.
 
+The C<max_children> attribute is not examined in this method - you
+can spawn a new child regardless of the number of children already
+spawned. However, you children started with this method still count
+against the limit used by C<queue()>.
+
 Note: on Windows with threaded Perl, threads instead of forks are used.
 See C<thread> for the caveats that apply.  The PID returned is instead
 a meaningless (outside of this module) counter, not associated with any
@@ -120,12 +169,12 @@ sub async {
 
     my $pipe = IO::Pipe->new();
 
-    my ($pid, $thr);
+    my ( $pid, $thr );
     if ($do_thread) {
         $pid = $self->_count();
-        $self->_count($pid + 1);
+        $self->_count( $pid + 1 );
 
-        $thr = threads->create( sub { $self->_child($sub, $pipe, $pid); } );
+        $thr = threads->create( sub { $self->_child( $sub, $pipe, $pid ); } );
         if ( !defined($thr) ) { die "thread creation failed: $!"; }
     } else {
         $pid = fork();
@@ -145,13 +194,13 @@ sub async {
         return $pid;
 
     } else {
-        $self->_child($sub, $pipe, undef);
+        $self->_child( $sub, $pipe, undef );
     }
 }
 
 sub _child {
-    if (scalar(@_) != 4) { confess 'invalid call'; }
-    my ($self, $sub, $pipe, $pid) = @_;
+    if ( scalar(@_) != 4 ) { confess 'invalid call'; }
+    my ( $self, $sub, $pipe, $pid ) = @_;
 
     # We are in the child process
     $pipe->writer();
@@ -160,7 +209,8 @@ sub _child {
     try {
         my $result = $sub->();
         $self->_send_result( $pipe, $result, $pid );
-    } catch {
+    }
+    catch {
         $self->_send_error( $pipe, $_, $pid );
     };
 
@@ -206,7 +256,7 @@ return 1.
 sub waitone {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
-    
+
     my $sp = $self->_subprocs();
     if ( !keys(%$sp) ) { return undef; }
 
@@ -219,6 +269,9 @@ sub waitone {
         $self->_read_result($child);
         $thr->join();
 
+        # Start queued children, if needed
+        $self->_start_queued_children();
+
         return 1;
     } else {
         # On everything but Windows
@@ -230,7 +283,7 @@ sub waitone {
 
         foreach my $fh (@ready) {
             foreach my $child ( keys(%$sp) ) {
-                if ( defined($fh->fileno())) {
+                if ( defined( $fh->fileno() ) ) {
                     if ( $fh->fileno() == $sp->{$child}{fh}->fileno() ) {
                         my $thr = $self->_subprocs()->{$child}{thread};
                         $self->_read_result($child);
@@ -238,10 +291,13 @@ sub waitone {
                         if ($do_thread) {
                             $thr->join();
                         } else {
-                            waitpid($child, 0);
+                            waitpid( $child, 0 );
                         }
 
-                        return 1;  # We don't want to read more than one!
+                        # Start queued children, if needed
+                        $self->_start_queued_children();
+
+                        return 1;    # We don't want to read more than one!
                     }
                 }
             }
@@ -249,7 +305,7 @@ sub waitone {
     }
 
     # We should never get here
-    return undef;
+    return;
 }
 
 =method wait($pid)
@@ -276,13 +332,13 @@ sub wait {
         return;
     }
 
-    my $thr = $self->_subprocs()->{$pid}{thread};
+    my $thr    = $self->_subprocs()->{$pid}{thread};
     my $result = $self->_read_result($pid);
 
     if ($do_thread) {
         $thr->join();
     } else {
-        waitpid($pid, 0);
+        waitpid( $pid, 0 );
     }
 
     return $result;
@@ -299,9 +355,32 @@ output).
 sub count {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
-    
+
     my $sp = $self->_subprocs();
-    return scalar(keys %$sp);
+    return scalar( keys %$sp );
+}
+
+=method queue( sub { ... }, \&callback )
+
+Spawns work on a new forked process, doing so immediately if less
+than C<max_children> are running.  If there are already
+C<max_children> are running, this will run the process once a slot
+becomes available.
+
+This method should be treated as nearly identical to C<async()>,
+with the only difference being the above behavior (limiting to
+C<max_children>) and not returning a PID.  Instead, a value of 1
+is returned if the process is immediately started, C<undef>
+otherwise.
+
+=cut
+
+sub queue {
+    if ( $#_ != 2 ) { confess 'invalid call'; }
+    my ( $self, $sub, $callback ) = @_;
+
+    push @{ $self->_queued_children }, [ $sub, $callback ];
+    return $self->_start_queued_children();
 }
 
 sub _send_result {
@@ -324,7 +403,7 @@ sub _send {
 
     my $msg = Storable::freeze( \$data );
 
-    if (!defined($msg)) {
+    if ( !defined($msg) ) {
         die 'freeze() returned undef for child return value';
     }
 
@@ -335,10 +414,10 @@ sub _send {
     $fh->write($type);
     $fh->write("\n");
 
-    $fh->write(length($msg));
+    $fh->write( length($msg) );
     $fh->write("\n");
 
-    binmode($fh, ':raw');
+    binmode( $fh, ':raw' );
 
     $fh->write($msg);
 
@@ -376,7 +455,7 @@ sub _read_result {
     my $data = ${ Storable::thaw($result) };
 
     my $caller = $self->_subprocs()->{$child}{caller};
-    my $thr = $self->_subprocs()->{$child}{thread};
+    my $thr    = $self->_subprocs()->{$child}{thread};
     delete $self->_subprocs()->{$child};
     $fh->close();
 
@@ -384,9 +463,36 @@ sub _read_result {
         $cinfo->{callback}->($data);
     } else {
         if ($do_thread) { $thr->join(); }
-        die("Child (created at " . $caller->[1] . " line " . $caller->[2] .
-            ") died with error: $data");
+        die(    "Child (created at "
+              . $caller->[1]
+              . " line "
+              . $caller->[2]
+              . ") died with error: $data" );
     }
+}
+
+# Start queued children, if possible.
+# Returns 1 if children were started, undef otherwise
+sub _start_queued_children() {
+    if ( $#_ != 0 ) { confess 'invalid call' }
+    my ($self) = @_;
+
+    if ( !( @{ $self->_queued_children } ) ) { return; }
+
+    # Can we start a queued process?
+    while ( scalar @{ $self->_queued_children } ) {
+        if ( ( !defined( $self->max_children ) ) || ( $self->count < $self->max_children ) ) {
+            # Start queued child
+            my $ele = shift @{ $self->_queued_children };
+            $self->async( $ele->[0], $ele->[1] );
+        } else {
+            # Can't unqueue
+            return;
+        }
+    }
+
+    # We started at least one process
+    return 1;
 }
 
 __PACKAGE__->meta->make_immutable;
