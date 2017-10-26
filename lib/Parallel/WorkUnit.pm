@@ -3,9 +3,9 @@
 # All Rights Reserved - See License
 #
 
-use v5.8;
-
 package Parallel::WorkUnit;
+
+use v5.8;
 
 # ABSTRACT: Provide easy-to-use forking with ability to pass back data
 
@@ -14,7 +14,10 @@ use warnings;
 use autodie;
 
 use Try::Tiny;
-my $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
+my $do_thread;
+## no critic (BuiltinFunctions::ProhibitStringyEval)
+$do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
+## critic
 if ($do_thread) { eval 'use Thread::Queue;'; }
 
 use Carp;
@@ -126,6 +129,8 @@ sub BUILD {
     if ($do_thread) {
         $self->_queue( Thread::Queue->new() );
     }
+
+    return;
 }
 
 =method async( sub { ... }, \&callback )
@@ -194,7 +199,7 @@ sub async {
         return $pid;
 
     } else {
-        $self->_child( $sub, $pipe, undef );
+        return $self->_child( $sub, $pipe, undef );
     }
 }
 
@@ -258,7 +263,7 @@ sub waitone {
     my ($self) = @_;
 
     my $sp = $self->_subprocs();
-    if ( !keys(%$sp) ) { return undef; }
+    if ( !keys(%$sp) ) { return; }
 
     if ($do_thread) {
         # On Windows
@@ -321,6 +326,7 @@ routine, then returns.
 
 =cut
 
+## no critic ('Subroutines::ProhibitBuiltinHomonyms')
 sub wait {
     if ( $#_ != 1 ) { confess 'invalid call'; }
     my ( $self, $pid ) = @_;
@@ -343,6 +349,7 @@ sub wait {
 
     return $result;
 }
+## use critic
 
 =method count()
 
@@ -387,14 +394,14 @@ sub _send_result {
     if ( $#_ != 3 ) { confess 'invalid call'; }
     my ( $self, $fh, $msg, $pid ) = @_;
 
-    $self->_send( $fh, 'RESULT', $msg, $pid );
+    return $self->_send( $fh, 'RESULT', $msg, $pid );
 }
 
 sub _send_error {
     if ( $#_ != 3 ) { confess 'invalid call'; }
     my ( $self, $fh, $err, $pid ) = @_;
 
-    $self->_send( $fh, 'ERROR', $err, $pid );
+    return $self->_send( $fh, 'ERROR', $err, $pid );
 }
 
 sub _send {
@@ -422,6 +429,7 @@ sub _send {
     $fh->write($msg);
 
     $fh->close();
+    return;
 }
 
 sub _read_result {
@@ -442,7 +450,6 @@ sub _read_result {
 
     my $result = '';
 
-    my $part;
     my $ret = 1;
     while ( defined($ret) && ( length($result) < $size ) ) {
         my $s = $size - length($result);
@@ -469,6 +476,8 @@ sub _read_result {
               . $caller->[2]
               . ") died with error: $data" );
     }
+
+    return;
 }
 
 # Start queued children, if possible.
