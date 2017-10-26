@@ -13,7 +13,7 @@ use warnings;
 use autodie;
 
 use Carp;
-use Test::More tests => 106;
+use Test::More tests => 144;
 use Test::Exception;
 
 # Set Timeout
@@ -71,6 +71,38 @@ for ( 0 .. $PROCS - 1 ) {
     delete $RESULTS{$_};
 }
 is( $wu->count, 0, "no processes running after waitall()" );
+
+
+# We're going to spawn 10 children and test the return value, just to
+# make sure it queue() works basically like async().  This time, though,
+# we are testing with an unlimited max_children
+lives_ok { $wu->max_children(undef) } 'Max children set to undef';
+is( $wu->max_children(), undef, 'Max children defaults to undef' );
+
+$PROCS = 10;
+for ( 0 .. $PROCS - 1 ) {
+    my $v = $_;
+    my $ret = $wu->queue( sub { return $v; }, \&cb );
+
+    ok( $ret, "(W1) Worker " . ( 1 + $_ ) . " started" );
+    is( $wu->count, 1 + $_, "(W1) " . ( 1 + $_ ) . " workers are executing" );
+}
+
+$r = $wu->waitone();
+ok( defined($r), "waitone() returned a defined value" );
+ok( ( $r >= 0 ) && ( $r < $PROCS ), "waitone() returned a valid return value" );
+is( $wu->count, 9, "waitone() properly kept nine processes running" );
+
+$wu->waitall();
+
+for ( 0 .. $PROCS - 1 ) {
+    ok( exists( $RESULTS{$_} ), "Worker First Exec $_ returned properly" );
+    delete $RESULTS{$_};
+}
+is( $wu->count, 0, "no processes running after waitall()" );
+
+lives_ok { $wu->max_children(2) } 'Max children set to 2';
+is( $wu->max_children(), 2, 'Max children defaults to 2' );
 
 # Queue up 10 processes
 for ( 0 .. $PROCS - 1 ) {
