@@ -69,7 +69,13 @@ subtype 'Parallel::WorkUnit::PositiveInt', as 'Int',
 
 If set to a value other than undef, limits the number of outstanding
 queue children (created by the C<queue()> method) that can be executing
-at any given time.  This defaults to 5.
+at any given time.
+
+This defaults to 5.
+
+This attribute does not impact the C<await()> method's ability to
+create children, but these children will count against the limit used
+by C<queue()>.
 
 Calling without any parameters will return the number of children.
 
