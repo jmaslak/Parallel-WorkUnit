@@ -73,7 +73,7 @@ at any given time.
 
 This defaults to 5.
 
-This attribute does not impact the C<await()> method's ability to
+This attribute does not impact the C<async()> method's ability to
 create children, but these children will count against the limit used
 by C<queue()>.
 
