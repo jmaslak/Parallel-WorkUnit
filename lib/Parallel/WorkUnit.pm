@@ -33,6 +33,9 @@ use namespace::autoclean;
 
 =head1 SYNOPSIS
 
+  #
+  # Standard Interface
+  #
   my $wu = Parallel::WorkUnit->new();
   $wu->async( sub { ... }, \&callback );
 
@@ -41,6 +44,16 @@ use namespace::autoclean;
   $wu->max_children(5);
   $wu->queue( sub { ... }, \&callback );
   $wu->waitall();
+
+
+  #
+  # AnyEvent Interface
+  #
+  use AnyEvent;
+
+  $wu->use_anyevent(1);
+  $wu->async( sub { ... }, \&callback );
+  $wu->waitall();  # Not strictly necessary
 
 =head1 DESCRIPTION
 
@@ -51,6 +64,8 @@ the information, serialized, back).  It was designed to be very simple
 for a developer to use, with the ability to pass reasonably large amounts
 of data back to the parent process.
 
+This module is also designed to work with AnyEvent when desired.
+
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
 
@@ -59,6 +74,36 @@ any developer's time to look through those and choose the best one.
 subtype 'Parallel::WorkUnit::PositiveInt', as 'Int',
   where { $_ > 0 },
   message { "The number you provided, $_, was not a positive number" };
+
+=attr use_anyevent
+
+  $wu->use_anyevent(1);
+
+If set to a value that is true, creates AnyEvent watchers for each
+asyncronous or queued job.  The equivilent of an C<AnyEvent> condition
+variable C<recv()>, used when all processes finish executing, is the
+C<waitall()> method.  However, the processes are integrated into a
+standard C<AnyEvent> loop, so it isn't strictly necessary to callC<waitall()>.
+In addition, a call to C<waitall()> will execute other processes in
+the C<AnyEvent> event loop.
+
+=cut
+
+has use_anyevent => (
+    is      => 'rw',
+    isa     => 'Bool',
+    trigger => \&_set_anyevent,
+);
+
+has _cv => (
+    is  => 'rw',
+    isa => 'Maybe[AnyEvent::CondVar]',
+);
+
+has _last_error => (
+    is  => 'rw',
+    isa => 'Maybe[Str]',
+);
 
 =attr max_children
 
@@ -178,6 +223,9 @@ sub async {
     if ( $#_ != 2 ) { confess 'invalid call'; }
     my ( $self, $sub, $callback ) = @_;
 
+    # If there are pending errors, throw that.
+    if ( defined( $self->_last_error ) ) { die( $self->_last_error ); }
+
     my $pipe = IO::Pipe->new();
 
     my ( $pid, $thr );
@@ -197,10 +245,16 @@ sub async {
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
+            anyevent => undef,
             callback => $callback,
             caller   => [ caller() ],
             thread   => $thr
         };
+
+        # Set up anyevent listener if appropriate
+        if ( $self->use_anyevent() ) {
+            $self->_add_anyevent_watcher($pid);
+        }
 
         return $pid;
 
@@ -249,8 +303,31 @@ sub waitall {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
 
+    # No subprocs?  Just return.
+    if ( scalar( keys %{ $self->_subprocs } ) == 0 ) {
+        if ( $self->use_anyevent ) {
+            $self->_cv( AnyEvent->condvar );
+        }
+
+        return;
+    }
+
+    # Using AnyEvent?
+    if ( defined( $self->_cv ) ) {
+        $self->_cv->recv();
+        if ( defined( $self->_last_error ) ) {
+            my $err = $self->_last_error;
+            $self->_last_error(undef);
+
+            die($err);
+        }
+
+        return;
+    }
+
     # Tail recursion
-    if ( $self->waitone() ) { goto &waitall }
+    if ( $self->_waitone() ) { goto &waitall }
+    return;
 }
 
 =method waitone()
@@ -265,6 +342,25 @@ return 1.
 =cut
 
 sub waitone {
+    if ( $#_ != 0 ) { confess 'invalid call'; }
+    my ($self) = @_;
+
+    my $rv = $self->_waitone();
+
+    # Using AnyEvent?
+    if ( defined( $self->_last_error ) ) {
+        my $err = $self->_last_error;
+        $self->_last_error(undef);
+
+        die($err);
+    }
+
+    return $rv;
+}
+
+# Meat of waitone (but doesn't handle returning an exception when using
+# anyevent)
+sub _waitone {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
 
@@ -337,6 +433,23 @@ sub wait {
     if ( $#_ != 1 ) { confess 'invalid call'; }
     my ( $self, $pid ) = @_;
 
+    my $rv = $self->_wait($pid);
+
+    if ( defined( $self->_last_error ) ) {
+        my $err = $self->_last_error;
+        $self->_last_error(undef);
+
+        die($err);
+    }
+
+    return $rv;
+}
+
+# Internal version that doesn't check for AnyEvent die needs
+sub _wait {
+    if ( $#_ != 1 ) { confess 'invalid call'; }
+    my ( $self, $pid ) = @_;
+
     if ( !exists( $self->_subprocs()->{$pid} ) ) {
 
         # We don't warn/die because it's possible that there is
@@ -391,6 +504,9 @@ otherwise.
 sub queue {
     if ( $#_ != 2 ) { confess 'invalid call'; }
     my ( $self, $sub, $callback ) = @_;
+
+    # If there are pending errors, throw that.
+    if ( defined( $self->_last_error ) ) { die( $self->_last_error ); }
 
     push @{ $self->_queued_children }, [ $sub, $callback ];
     return $self->_start_queued_children();
@@ -476,11 +592,21 @@ sub _read_result {
         $cinfo->{callback}->($data);
     } else {
         if ($do_thread) { $thr->join(); }
-        die(    "Child (created at "
-              . $caller->[1]
-              . " line "
-              . $caller->[2]
-              . ") died with error: $data" );
+
+        my $err =
+            "Child (created at "
+          . $caller->[1]
+          . " line "
+          . $caller->[2]
+          . ") died with error: $data";
+
+        if ( $self->use_anyevent ) {
+            # Can't throw events with anyevent
+            $self->_last_error($err);
+        } else {
+            # Otherwise we do throw it
+            die($err);
+        }
     }
 
     return;
@@ -493,6 +619,7 @@ sub _start_queued_children() {
     my ($self) = @_;
 
     if ( !( @{ $self->_queued_children } ) ) { return; }
+    if ( defined( $self->_last_error ) )     { return; }    # Do not queue if there are errors
 
     # Can we start a queued process?
     while ( scalar @{ $self->_queued_children } ) {
@@ -508,6 +635,68 @@ sub _start_queued_children() {
 
     # We started at least one process
     return 1;
+}
+
+# Sets up AnyEvent or tears it down as needed
+sub _set_anyevent() {
+    if ( $#_ < 1 ) { confess 'invalid call' }
+    if ( $#_ > 2 ) { confess 'invalid call' }
+    my ( $self, $new, $old ) = @_;
+
+    if ( ( !$old ) && $new ) {
+        # We are setting up AnyEvent
+        require AnyEvent;
+
+        if ( defined( $self->_subprocs() ) ) {
+            foreach my $pid ( keys %{ $self->_subprocs() } ) {
+                my $proc = $self->_subprocs()->{$pid};
+
+                $self->_add_anyevent_watcher($pid);
+            }
+        }
+
+        $self->_cv( AnyEvent->condvar );
+
+    } elsif ( $old && ( !$new ) ) {
+        # We are tearing down AnyEvent
+
+        if ( defined( $self->_subprocs() ) ) {
+            foreach my $pid ( keys %{ $self->_subprocs() } ) {
+                my $proc = $self->_subprocs()->{$pid};
+
+                $proc->{anyevent} = undef;
+            }
+        }
+
+        $self->_cv(undef);
+    }
+    return;
+}
+
+# Sets up the listener for AnyEvent
+sub _add_anyevent_watcher() {
+    if ( $#_ != 1 ) { confess 'invalid call' }
+    my ( $self, $pid ) = @_;
+
+    my $proc = $self->_subprocs()->{$pid};
+
+    $proc->{anyevent} = AnyEvent->io(
+        fh   => $proc->{fh},
+        poll => 'r',
+        cb   => sub {
+            $self->_wait($pid);
+            if ( scalar( keys %{ $self->_subprocs() } ) == 0 ) {
+                my $oldcv = $self->_cv;
+                $self->_cv( AnyEvent->condvar );
+                $oldcv->send();
+            }
+
+            # Start queued children, if needed
+            $self->_start_queued_children();
+        },
+    );
+
+    return;
 }
 
 __PACKAGE__->meta->make_immutable;
