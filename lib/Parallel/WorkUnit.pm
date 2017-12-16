@@ -15,18 +15,18 @@ use autodie;
 
 use Try::Tiny;
 
-# 
+#
 # Setting up threads, on Win32, if appropriate
 #
 
+my $use_anyevent_pipe;
 ## no critic (BuiltinFunctions::ProhibitStringyEval)
-my $use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
+$use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
 ## critic
-if ($use_anyevent_pipe) { eval 'use AnyEvent::Util;' if $^O eq 'MSWin32'; }
 
 my $use_threads;
 ## no critic (BuiltinFunctions::ProhibitStringyEval)
-$use_threads = eval 'use threads qw//; 1' if ( ( $^O eq 'MSWin32' ) && ( ! $use_anyevent_pipe ) );
+$use_threads = eval 'use threads qw//; 1' if ( ( $^O eq 'MSWin32' ) && ( !$use_anyevent_pipe ) );
 ## critic
 if ($use_threads) { eval 'use Thread::Queue;'; }
 
@@ -486,7 +486,7 @@ sub _wait {
 
     my $thr    = $self->_subprocs()->{$pid}{thread};
     my $result = $self->_read_result($pid);
-    
+
     if ($use_threads) {
         $thr->join();
     } else {
