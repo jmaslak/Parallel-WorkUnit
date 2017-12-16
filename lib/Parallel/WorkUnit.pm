@@ -225,10 +225,10 @@ can spawn a new child regardless of the number of children already
 spawned. However, you children started with this method still count
 against the limit used by C<queue()>.
 
-Note: on Windows with threaded Perl, threads instead of forks are used.
-See C<thread> for the caveats that apply.  The PID returned is instead
-a meaningless (outside of this module) counter, not associated with any
-Windows thread identifier.
+Note: on Windows with threaded Perl, if C<AnyEvent> is not installed,
+threads instead of forks are used.  See C<thread> for the caveats
+that apply.  The PID returned is instead a meaningless (outside of
+this module) counter, not associated with any Windows thread identifier.
 
 =cut
 
@@ -730,14 +730,3 @@ __PACKAGE__->meta->make_immutable;
 
 1;
 
-=head1 BUGS
-
-Windows doesn't do C<fork()>, but emulates it with threads.  As a result,
-any thread unsafe library is going to cause problems with Windows.  In
-addition, all the normal thread caveats apply - see L<threads> for more
-information.
-
-In addition, this code is unlikely to function properly on a Windows without
-threaded Perl.
-
-=cut

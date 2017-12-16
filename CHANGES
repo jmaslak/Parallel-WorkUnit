@@ -2,6 +2,8 @@
 Joelle Maslak <jmaslak@antelope.net>
  * Switch from Thread::Queue to socket pairs to allow select() on
    Windows when AnyEvent::Util::portable_pipe is available.
+ * Use native Perl fork emulation when AnyEvent::Util::portable_pipe
+   is available
 
 1.014 - Dec 13, 2017
 Joelle Maslak <jmaslak@antelope.net>
