@@ -14,17 +14,23 @@ use warnings;
 use autodie;
 
 use Try::Tiny;
-my $do_thread;
-## no critic (BuiltinFunctions::ProhibitStringyEval)
-$do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
-## critic
-if ($do_thread) { eval 'use Thread::Queue;'; }
 
-my $use_anyevent_pipe;
+# 
+# Setting up threads, on Win32, if appropriate
+#
+
 ## no critic (BuiltinFunctions::ProhibitStringyEval)
-$use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
+my $use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
 ## critic
-if ($use_anyevent_pipe) { eval 'use AnyEvent::Util;'; }
+if ($use_anyevent_pipe) { eval 'use AnyEvent::Util;' if $^O eq 'MSWin32'; }
+
+my $use_threads;
+## no critic (BuiltinFunctions::ProhibitStringyEval)
+$use_threads = eval 'use threads qw//; 1' if ( ( $^O eq 'MSWin32' ) && ( ! $use_anyevent_pipe ) );
+## critic
+if ($use_threads) { eval 'use Thread::Queue;'; }
+
+my $use_thread_queue = ( $use_threads && ( !$use_anyevent_pipe ) );
 
 use Carp;
 
@@ -184,7 +190,7 @@ sub BUILD {
 
     $self->_subprocs( {} );
 
-    if ($do_thread) {
+    if ($use_thread_queue) {
         $self->_queue( Thread::Queue->new() );
     }
 
@@ -242,7 +248,7 @@ sub async {
     }
 
     my ( $pid, $thr );
-    if ($do_thread) {
+    if ($use_threads) {
         $pid = $self->_count();
         $self->_count( $pid + 1 );
 
@@ -301,7 +307,7 @@ sub _child {
     };
 
     # Windows doesn't do fork(), it does threads...
-    if ($do_thread) {
+    if ($use_threads) {
         return 1;
     } else {
         exit();
@@ -388,7 +394,7 @@ sub _waitone {
     my $sp = $self->_subprocs();
     if ( !keys(%$sp) ) { return; }
 
-    if ($do_thread) {
+    if ($use_thread_queue) {
         # On Windows
         #
         my $child = $self->_queue()->dequeue();
@@ -416,7 +422,7 @@ sub _waitone {
                         my $thr = $self->_subprocs()->{$child}{thread};
                         $self->_read_result($child);
 
-                        if ($do_thread) {
+                        if ($use_threads) {
                             $thr->join();
                         } else {
                             waitpid( $child, 0 );
@@ -480,8 +486,8 @@ sub _wait {
 
     my $thr    = $self->_subprocs()->{$pid}{thread};
     my $result = $self->_read_result($pid);
-
-    if ($do_thread) {
+    
+    if ($use_threads) {
         $thr->join();
     } else {
         waitpid( $pid, 0 );
@@ -557,7 +563,7 @@ sub _send {
         die 'freeze() returned undef for child return value';
     }
 
-    if ($do_thread) {
+    if ($use_thread_queue) {
         $self->_queue()->enqueue($pid);
     }
 
@@ -612,7 +618,7 @@ sub _read_result {
     if ( $type eq 'RESULT' ) {
         $cinfo->{callback}->($data);
     } else {
-        if ($do_thread) { $thr->join(); }
+        if ($use_threads) { $thr->join(); }
 
         my $err =
             "Child (created at "
