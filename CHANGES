@@ -1,6 +1,13 @@
+1.014 - Dec 13, 2017
+Joelle Maslak <jmaslak@antelope.net>
+ * Use AnyEvent::Util::portable_pipe on Windows when using available,
+   as EV and other event loops can't select on pipes on Windows
+ * Released as DEV (TRIAL) version for CPAN Testers validation
+
 1.013 - Dec 12, 2017
 Joelle Maslak <jmaslak@antelope.net>
  * Support AnyEvent (optionally, not required)
+ * Released as DEV (TRIAL) version for CPAN Testers validation
 
 1.012 - Oct 26, 2017
 Joelle Maslak <jmaslak@antelope.net>

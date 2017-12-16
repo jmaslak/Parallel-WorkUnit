@@ -20,7 +20,9 @@ use Test::Exception;
 my %RESULTS;
 
 SKIP: {
-    skip 'AnyEvent not installed', 53 unless eval { require AnyEvent; };
+    if (! eval { require AnyEvent }) {
+        skip 'AnyEvent not installed', 53;
+    }
 
     require AnyEvent;
 

@@ -20,8 +20,15 @@ $do_thread = eval 'use threads qw//; 1' if $^O eq 'MSWin32';
 ## critic
 if ($do_thread) { eval 'use Thread::Queue;'; }
 
+my $use_anyevent_pipe;
+## no critic (BuiltinFunctions::ProhibitStringyEval)
+$use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
+## critic
+if ($use_anyevent_pipe) { eval 'use AnyEvent::Util;'; }
+
 use Carp;
 
+use IO::Handle;
 use IO::Pipe;
 use IO::Select;
 use Moose;
@@ -226,7 +233,13 @@ sub async {
     # If there are pending errors, throw that.
     if ( defined( $self->_last_error ) ) { die( $self->_last_error ); }
 
-    my $pipe = IO::Pipe->new();
+    my $pipe;
+    if ($use_anyevent_pipe) {
+        $pipe = [];
+        (@$pipe) = AnyEvent::Util::portable_pipe();
+    } else {
+        $pipe = IO::Pipe->new();
+    }
 
     my ( $pid, $thr );
     if ($do_thread) {
@@ -241,7 +254,11 @@ sub async {
 
     if ($pid) {
         # We are in the parent process
-        $pipe->reader();
+        if ($use_anyevent_pipe) {
+            $pipe = $pipe->[0];
+        } else {
+            $pipe->reader();
+        }
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
@@ -268,7 +285,11 @@ sub _child {
     my ( $self, $sub, $pipe, $pid ) = @_;
 
     # We are in the child process
-    $pipe->writer();
+    if ($use_anyevent_pipe) {
+        $pipe = $pipe->[1];
+    } else {
+        $pipe->writer();
+    }
     $pipe->autoflush(1);
 
     try {
