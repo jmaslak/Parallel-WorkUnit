@@ -7,7 +7,7 @@ package Parallel::WorkUnit;
 
 use v5.8;
 
-# ABSTRACT: Provide easy-to-use forking with ability to pass back data
+# ABSTRACT: Provide multi-paradigm forking with ability to pass back data
 
 use strict;
 use warnings;
@@ -54,15 +54,31 @@ use namespace::autoclean;
 
   $wu->waitall();
 
+
+  #
+  # Limiting Maximum Parallelization
+  #
   $wu->max_children(5);
   $wu->queue( sub { ... }, \&callback );
   $wu->waitall();
+
+  
+  #
+  # Ordered Responses
+  #
+  use AnyEvent;
+  my $wu = Parallel::WorkUnit->new();
+  $wu->ordered(1);
+  $wu->async( sub { ... } );
+
+  @results = $wu->waitall();
 
 
   #
   # AnyEvent Interface
   #
   use AnyEvent;
+  my $wu = Parallel::WorkUnit->new();
 
   $wu->use_anyevent(1);
   $wu->async( sub { ... }, \&callback );
@@ -118,6 +134,52 @@ has _last_error => (
     isa => 'Maybe[Str]',
 );
 
+=attr ordered
+
+  $wu->ordered(1);
+  $wu->ordered(undef);
+
+  say "Is ordering responses" if $wu->ordered();
+
+If set to a value other than zero or undef, uses the ordered response
+mode.  In ordered response mode, instead of work units calling a callback
+function, the C<Parallel::WorkUnit> instance will gather and store those
+responses and return them from C<waitall()> in the same order as the
+individual C<async()> calls.
+
+Ordering can be combined with other paradigms, such as limiting the
+maximum children through C<max_children> and C<use_anyevent>.
+
+The default value is false.
+
+Thie mode of ordering cannot be changed when there are currently
+children being executed.
+
+Calling without any parameters will return the current status of this
+ordering mode.
+
+=cut
+
+has 'ordered' => (
+    is      => 'rw',
+    isa     => 'Bool',
+    default => undef,
+    trigger => \&_change_ordered,
+);
+
+sub _change_ordered {
+    if ( scalar(@_) != 3 ) { confess 'invalid call'; }
+    my ( $self, $new, $old ) = @_;
+
+    if ( $old      && $new )      { return; }
+    if ( ( !$old ) && ( !$new ) ) { return; }
+
+    if ( scalar keys %{ $self->_subprocs() } ) {
+        $self->ordered(0);
+        croak("Cannot change ordered mode value while subprocesses are outstanding");
+    }
+}
+
 =attr max_children
 
   $wu->max_children(5);
@@ -125,7 +187,7 @@ has _last_error => (
 
   say "Max number of children: " . $wu->max_children();
 
-If set to a value other than undef, limits the number of outstanding
+If set to a value other than zero or undef, limits the number of outstanding
 queue children (created by the C<queue()> method) that can be executing
 at any given time.
 
