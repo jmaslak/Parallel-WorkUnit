@@ -1,4 +1,4 @@
-1.110 - Jan 8, 2017
+1.110 - Jan 8, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Provide ordered response support (spawn work units, have the
    results put into an array in order of spawning of the work units)
