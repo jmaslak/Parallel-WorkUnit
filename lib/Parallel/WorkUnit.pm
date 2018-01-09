@@ -1,5 +1,5 @@
-#
-# Copyright (C) 2015-2017 Joelle Maslak
+
+# Copyright (C) 2015-2018 Joelle Maslak
 # All Rights Reserved - See License
 #
 
@@ -68,7 +68,6 @@ use namespace::autoclean;
   #
   use AnyEvent;
   my $wu = Parallel::WorkUnit->new();
-  $wu->ordered(1);
   $wu->async( sub { ... } );
 
   @results = $wu->waitall();
@@ -104,6 +103,10 @@ subtype 'Parallel::WorkUnit::PositiveInt', as 'Int',
   where { $_ > 0 },
   message { "The number you provided, $_, was not a positive number" };
 
+subtype 'Parallel::WorkUnit::NonNegativeInt', as 'Int',
+  where { $_ >= 0 },
+  message { "The number you provided, $_, was not a non-negative number" };
+
 =attr use_anyevent
 
   $wu->use_anyevent(1);
@@ -134,51 +137,19 @@ has _last_error => (
     isa => 'Maybe[Str]',
 );
 
-=attr ordered
-
-  $wu->ordered(1);
-  $wu->ordered(undef);
-
-  say "Is ordering responses" if $wu->ordered();
-
-If set to a value other than zero or undef, uses the ordered response
-mode.  In ordered response mode, instead of work units calling a callback
-function, the C<Parallel::WorkUnit> instance will gather and store those
-responses and return them from C<waitall()> in the same order as the
-individual C<async()> calls.
-
-Ordering can be combined with other paradigms, such as limiting the
-maximum children through C<max_children> and C<use_anyevent>.
-
-The default value is false.
-
-Thie mode of ordering cannot be changed when there are currently
-children being executed.
-
-Calling without any parameters will return the current status of this
-ordering mode.
-
-=cut
-
-has 'ordered' => (
-    is      => 'rw',
-    isa     => 'Bool',
-    default => undef,
-    trigger => \&_change_ordered,
+has _ordered_count => (
+    is       => 'rw',
+    isa      => 'Parallel::WorkUnit::NonNegativeInt',
+    init_arg => undef,
+    default  => 0,
 );
 
-sub _change_ordered {
-    if ( scalar(@_) != 3 ) { confess 'invalid call'; }
-    my ( $self, $new, $old ) = @_;
-
-    if ( $old      && $new )      { return; }
-    if ( ( !$old ) && ( !$new ) ) { return; }
-
-    if ( scalar keys %{ $self->_subprocs() } ) {
-        $self->ordered(0);
-        croak("Cannot change ordered mode value while subprocesses are outstanding");
-    }
-}
+has _ordered_responses => (
+    is       => 'rw',
+    isa      => 'ArrayRef',
+    init_arg => undef,
+    default  => sub { [] },
+);
 
 =attr max_children
 
@@ -261,6 +232,12 @@ sub BUILD {
 
 =method async( sub { ... }, \&callback )
 
+  $wu->async( sub { return 1 }, \&callback );
+
+  # When using ordered return mode
+  $wu->async( sub { return 1 } );
+  @results = $wu->waitall();
+
 Spawns work on a new forked process.  The forked process inherits
 all Perl state from the parent process, as would be expected with
 a standard C<fork()> call.  The child shares nothing with the
@@ -271,13 +248,15 @@ anonymous sub (C<sub { ... }>) and should return a scalar.  Any
 scalar that L<Storable>'s C<freeze()> method can deal with
 is acceptable (for instance, a hash reference or C<undef>).
 
-When the work is completed, it serializes the result and streams
-it back to the parent process via a pipe.  The parent, in a
-C<waitall()> call, will call the callback function with the
-unserialized return value.
+The result is serialized and streamed back to the parent process
+via a pipe.  The parent, in a C<waitall()> call, will call the
+callback function (if provided) with the unserialized return value.
 
-Should the child process C<die>, the parent process will also
-die (inside the C<waitall()> method).
+If a callback is not provided, the parent, in the C<waitall()> call,
+will gather these results and return them as an ordered list.
+
+In all modes, should the child process C<die>, the parent process
+will also die (inside the C<waitall()> method).
 
 The PID of the child is returned to the parent process when
 this method is executed.
@@ -295,8 +274,27 @@ this module) counter, not associated with any Windows thread identifier.
 =cut
 
 sub async {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $sub, $callback ) = @_;
+    if ( $#_ < 1 ) { confess 'invalid call'; }
+    my $self = shift;
+    my $sub  = shift;
+
+    my $callback;
+    if ( scalar(@_) == 0 ) {
+        # No callback provided
+
+        my $cbnum = $self->_ordered_count;
+        $self->_ordered_count( $cbnum + 1 );
+
+        # We create a callback that populates the ordered responses
+        $callback = sub {
+            @{ $self->_ordered_responses }[$cbnum] = shift;
+        };
+    } elsif ( scalar(@_) == 1 ) {
+        # Callback provided
+        $callback = shift;
+    } else {
+        confess 'invalid call';
+    }
 
     # If there are pending errors, throw that.
     if ( defined( $self->_last_error ) ) { die( $self->_last_error ); }
@@ -386,6 +384,14 @@ method will return.
 If a child dies unexpectedly, this method will C<die()> and propagate a
 modified exception.
 
+In the standard (not ordered) mode, I.E. where the C<ordered> attribute
+is set to false, this will return nothing.
+
+In the ordered mode, I.E. where the C<ordered> attribute is set to
+true, this will return the results of the async calls in an ordered
+list.  The list will be ordered by the order in which the async calls
+were executed.
+
 =cut
 
 sub waitall {
@@ -398,7 +404,7 @@ sub waitall {
             $self->_cv( AnyEvent->condvar );
         }
 
-        return;
+        return $self->_get_and_reset_ordered_responses();
     }
 
     # Using AnyEvent?
@@ -411,12 +417,28 @@ sub waitall {
             die($err);
         }
 
-        return;
+        return $self->_get_and_reset_ordered_responses();
     }
 
     # Tail recursion
     if ( $self->_waitone() ) { goto &waitall }
-    return;
+
+    return @{ $self->_get_and_reset_ordered_responses() };
+}
+
+# Gets the _ordered_responses and returns the reference.  Also
+# resets the _ordered_responses and the _ordered_counts to an
+# empty list and zero respectively.
+sub _get_and_reset_ordered_responses {
+    if ( $#_ != 0 ) { confess 'invalid call'; }
+    my $self = shift;
+
+    my (@r) = @{ $self->_ordered_responses() };
+
+    $self->_ordered_responses( [] );
+    $self->_ordered_count(0);
+
+    return @r;
 }
 
 =method waitone()
@@ -588,11 +610,29 @@ C<max_children>) and not returning a PID.  Instead, a value of 1
 is returned if the process is immediately started, C<undef>
 otherwise.
 
+The result is serialized and streamed back to the parent process
+via a pipe.  The parent, in a C<waitall()> call, will call the
+callback function (if provided) with the unserialized return value.
+
+If a callback is not provided, the parent, in the C<waitall()> call,
+will gather these results and return them as an ordered list.
+
 =cut
 
 sub queue {
-    if ( $#_ != 2 ) { confess 'invalid call'; }
-    my ( $self, $sub, $callback ) = @_;
+    if ( $#_ < 1 ) { confess 'invalid call'; }
+    my $self = shift;
+    my $sub  = shift;
+
+    my $callback;
+    if ( scalar(@_) == 0 ) {
+        # We're okay, don't need to do anything - no callback
+    } elsif ( scalar(@_) == 1 ) {
+        # We have a callback
+        $callback = shift;
+    } else {
+        confess 'invalid call';
+    }
 
     # If there are pending errors, throw that.
     if ( defined( $self->_last_error ) ) { die( $self->_last_error ); }
@@ -715,7 +755,11 @@ sub _start_queued_children() {
         if ( ( !defined( $self->max_children ) ) || ( $self->count < $self->max_children ) ) {
             # Start queued child
             my $ele = shift @{ $self->_queued_children };
-            $self->async( $ele->[0], $ele->[1] );
+            if ( !defined( $ele->[1] ) ) {
+                $self->async( $ele->[0] );
+            } else {
+                $self->async( $ele->[0], $ele->[1] );
+            }
         } else {
             # Can't unqueue
             return;
