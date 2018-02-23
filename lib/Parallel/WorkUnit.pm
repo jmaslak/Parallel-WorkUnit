@@ -234,7 +234,7 @@ sub BUILD {
 
   $wu->async( sub { return 1 }, \&callback );
 
-  # When using ordered return mode
+  # To get back results in "ordered" return mode
   $wu->async( sub { return 1 } );
   @results = $wu->waitall();
 
@@ -384,13 +384,12 @@ method will return.
 If a child dies unexpectedly, this method will C<die()> and propagate a
 modified exception.
 
-In the standard (not ordered) mode, I.E. where the C<ordered> attribute
-is set to false, this will return nothing.
+In the standard (not ordered) mode, I.E. where a callback was passed
+to C<async()>, this will return nothing.
 
-In the ordered mode, I.E. where the C<ordered> attribute is set to
-true, this will return the results of the async calls in an ordered
-list.  The list will be ordered by the order in which the async calls
-were executed.
+In the ordered mode, I.E. where no callbacks were provided to C<async()>,
+this will return the results of the async calls in an ordered list.  The
+list will be ordered by the order in which the async calls were executed.
 
 =cut
 

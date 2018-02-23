@@ -1,3 +1,7 @@
+1.111 - Jan 22, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Minor documentation update (remove reference to "ordered" attribute)
+
 1.110 - Jan 8, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Provide ordered response support (spawn work units, have the
