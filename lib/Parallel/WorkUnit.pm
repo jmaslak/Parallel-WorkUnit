@@ -207,6 +207,71 @@ has '_queued_children' => (
     default  => sub { [] },
 );
 
+=attr allow_coderefs
+
+  $wu->allow_coderefs(1);
+  $wu->allow_coderefs(undef);
+
+If set to a value other than zero or undef, allows code references to
+be returned from child processes.  By default, code references cannot
+be stored.
+
+If you are using this feature, it should be set to a true value before
+executing any children, and it should remain true until all children
+that might return code refs return.
+
+This is trickier than it might first appear, because the code block is
+essentially treated as a stand-alone code block.  In otherwords, you
+cannot use closures or reference variables from outside of it.  Thus,
+the following will not work:
+
+  # This will throw an exception
+  $wu->allow_coderefs(1);
+  my $r = rand 6;
+  $wu->async(
+    sub {
+        return int ($r+1);
+    },
+    sub { $ret = shift; }
+  );
+  my $ret = $wu->wait();
+  say "Random number is: " . $ret->();
+   
+
+if you need to return a sub dependent upon something from
+the outside world, the following pattern probably makes the most
+sense:
+
+  $wu->allow_coderefs(1);
+  my $r = rand 6;
+  my $ret;
+  $wu->async(
+    sub {
+        return [
+            sub { int shift + 1; },
+            $r
+        ];
+    },
+    sub { my $child = shift; $ret = sub { $child->( @_ ) } }
+  );
+  my $ret = $wu->wait();
+  say "Random number is: " . $ret->();
+
+This routine generates a random number, then forks off a subprocess
+that returns a subroutine that prints that adds one and truncates
+the non-integer portion of the number.  This is probably not particularly
+useful, it's just an example!  In this pattern, you are passing back a sub,
+but not a closure, as well as the parameters to pass the sub (in this case,
+C<$r>).  Note that the C<$r> passed back and used in the subroutine is a
+copy of the original C<$r>, not the actual C<$r> in the main program.
+
+=cut
+
+has allow_coderefs => (
+    is  => 'rw',
+    isa => 'Int',
+);
+
 =method new
 
 Create a new workunit class.  Optionally, takes a list that corresponds
@@ -658,7 +723,11 @@ sub _send {
     if ( $#_ != 4 ) { confess 'invalid call'; }
     my ( $self, $fh, $type, $data, $pid ) = @_;
 
-    my $msg = Storable::freeze( \$data );
+    my $msg;
+    do {
+        local $Storable::Deparse = $self->allow_coderefs();
+        $msg = Storable::freeze( \$data );
+    };
 
     if ( !defined($msg) ) {
         die 'freeze() returned undef for child return value';
@@ -709,7 +778,17 @@ sub _read_result {
         if ( defined($ret) ) { $result .= $part; }
     }
 
-    my $data = ${ Storable::thaw($result) };
+    my $data;
+    do {
+        local $Storable::Eval = $self->allow_coderefs();
+        if ($Storable::Eval) {
+            # We need to untaint the values
+            $result =~ m/\A(.*)\z/s;
+            $result = $1;
+        }
+
+        $data = ${ Storable::thaw($result) };
+    };
 
     my $caller = $self->_subprocs()->{$child}{caller};
     my $thr    = $self->_subprocs()->{$child}{thread};
