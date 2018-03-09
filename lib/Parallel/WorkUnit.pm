@@ -62,7 +62,7 @@ use namespace::autoclean;
   $wu->queue( sub { ... }, \&callback );
   $wu->waitall();
 
-  
+
   #
   # Ordered Responses
   #

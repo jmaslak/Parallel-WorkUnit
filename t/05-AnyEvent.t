@@ -99,7 +99,7 @@ SKIP: {
     # We want to test that we can return a more complex data type
 
     $wu->async(
-        sub { 
+        sub {
             my @ret;
             for (my $i=0; $i<50000; $i++) { push @ret, $i; }
             return \@ret;
