@@ -782,6 +782,7 @@ sub _set_anyevent() {
         if ( defined( $self->_subprocs() ) ) {
             foreach my $pid ( keys %{ $self->_subprocs() } ) {
                 my $proc = $self->_subprocs()->{$pid};
+                undef $proc;
 
                 $self->_add_anyevent_watcher($pid);
             }
