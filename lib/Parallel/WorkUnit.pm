@@ -115,9 +115,11 @@ If set to a value that is true, creates AnyEvent watchers for each
 asyncronous or queued job.  The equivilent of an C<AnyEvent> condition
 variable C<recv()>, used when all processes finish executing, is the
 C<waitall()> method.  However, the processes are integrated into a
-standard C<AnyEvent> loop, so it isn't strictly necessary to callC<waitall()>.
+standard C<AnyEvent> loop, so it isn't strictly necessary to call C<waitall()>.
 In addition, a call to C<waitall()> will execute other processes in
 the C<AnyEvent> event loop.
+
+The default value is false.
 
 =cut
 
