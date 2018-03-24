@@ -885,9 +885,14 @@ sub _clear_all {
     $self->_last_error(undef);
     $self->_ordered_count(0);
     $self->_ordered_responses( [] );
-    $self->_subprocs( {} );
     $self->_count(1);
     $self->_queued_children( [] );
+
+    do {
+        # Don't warn on AnyEvent in child threads being DEMOLISHed
+        local $SIG{__WARN__} = sub { };
+        $self->_subprocs( {} );
+    };
 
     if ( defined( $self->_queue() ) ) {
         if ($keep_queue) {
