@@ -645,7 +645,7 @@ sub queue {
     if ( $#_ < 1 ) { confess 'invalid call'; }
     my $self = shift;
     my $sub  = shift;
-    
+
     # Test $sub to make sure it is a code ref or a sub ref
     if (! _codelike($sub)) {
         croak("Parameter to queue() is not a code (or codelike) reference");
