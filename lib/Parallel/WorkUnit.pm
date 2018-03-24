@@ -918,11 +918,6 @@ sub _codelike {
 sub DEMOLISH {
     my $self = shift;
 
-    # If we use threads, just don't print this warning because it is
-    # going to happen on parent and child threads both. We want
-    # different process IDs for this warning.
-    if ($use_threads) { return; }
-
     if ( scalar( keys %{ $self->_subprocs } ) ) {
         warn "Warning: Subprocesses running when Parallel::WorkUnit object destroyed\n";
     }
