@@ -375,6 +375,12 @@ sub async {
 
     } else {
         # We are in the child process
+        if ($use_anyevent_pipe) {
+            $pipe = $pipe->[1];
+        } else {
+            $pipe->writer();
+        }
+        $pipe->autoflush(1);
 
         return $self->_child( $sub, $pipe, undef );
     }
@@ -389,14 +395,6 @@ sub _child {
     foreach my $wu ( map { $$_ } @ALL_WU ) {
         $wu->_clear_all( $wu == $self );
     }
-
-    # We are in the child process
-    if ($use_anyevent_pipe) {
-        $pipe = $pipe->[1];
-    } else {
-        $pipe->writer();
-    }
-    $pipe->autoflush(1);
 
     try {
         my $result = $sub->();
