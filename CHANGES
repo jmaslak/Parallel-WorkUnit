@@ -1,3 +1,11 @@
+1.113 - Mar 23, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Add test on queue() and async() to validate that params were coderefs
+   (or "coderef like")
+ * Add Demolish that tests for running processes and emits warning for
+   running processes
+ * Released as DEV (TRIAL) version for CPAN Testers validation
+
 1.112 - Feb 23, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Released as prod version with 1.111 fixes

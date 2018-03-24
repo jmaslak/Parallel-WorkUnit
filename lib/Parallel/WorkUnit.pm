@@ -13,6 +13,7 @@ use strict;
 use warnings;
 use autodie;
 
+use Scalar::Util qw(blessed reftype weaken);
 use Try::Tiny;
 
 #
@@ -34,6 +35,7 @@ my $use_thread_queue = ( $use_threads && ( !$use_anyevent_pipe ) );
 
 use Carp;
 
+use overload;
 use IO::Handle;
 use IO::Pipe;
 use IO::Select;
@@ -201,6 +203,13 @@ has '_count' => (
     default  => 1
 );
 
+has '_parent_pid' => (
+    is       => 'rw',
+    isa      => 'Int',
+    init_arg => undef,
+    default  => $$,
+);
+
 # Children queued
 has '_queued_children' => (
     is       => 'rw',
@@ -280,6 +289,11 @@ sub async {
     my $self = shift;
     my $sub  = shift;
 
+    # Test $sub to make sure it is a code ref or a sub ref
+    if (! _codelike($sub)) {
+        croak("Parameter to async() is not a code (or codelike) reference");
+    }
+
     my $callback;
     if ( scalar(@_) == 0 ) {
         # No callback provided
@@ -288,8 +302,12 @@ sub async {
         $self->_ordered_count( $cbnum + 1 );
 
         # We create a callback that populates the ordered responses
+        my $selfref = $self;
+        weaken $selfref;
         $callback = sub {
-            @{ $self->_ordered_responses }[$cbnum] = shift;
+            if (defined $selfref) { # Incase this went away
+                @{ $selfref->_ordered_responses }[$cbnum] = shift;
+            }
         };
     } elsif ( scalar(@_) == 1 ) {
         # Callback provided
@@ -322,6 +340,7 @@ sub async {
 
     if ($pid) {
         # We are in the parent process
+
         if ($use_anyevent_pipe) {
             $pipe = $pipe->[0];
         } else {
@@ -344,6 +363,8 @@ sub async {
         return $pid;
 
     } else {
+        # We are in the child process
+
         return $self->_child( $sub, $pipe, undef );
     }
 }
@@ -624,6 +645,11 @@ sub queue {
     if ( $#_ < 1 ) { confess 'invalid call'; }
     my $self = shift;
     my $sub  = shift;
+    
+    # Test $sub to make sure it is a code ref or a sub ref
+    if (! _codelike($sub)) {
+        croak("Parameter to queue() is not a code (or codelike) reference");
+    }
 
     my $callback;
     if ( scalar(@_) == 0 ) {
@@ -744,7 +770,7 @@ sub _read_result {
 
 # Start queued children, if possible.
 # Returns 1 if children were started, undef otherwise
-sub _start_queued_children() {
+sub _start_queued_children {
     if ( $#_ != 0 ) { confess 'invalid call' }
     my ($self) = @_;
 
@@ -772,7 +798,7 @@ sub _start_queued_children() {
 }
 
 # Sets up AnyEvent or tears it down as needed
-sub _set_anyevent() {
+sub _set_anyevent {
     if ( $#_ < 1 ) { confess 'invalid call' }
     if ( $#_ > 2 ) { confess 'invalid call' }
     my ( $self, $new, $old ) = @_;
@@ -809,7 +835,7 @@ sub _set_anyevent() {
 }
 
 # Sets up the listener for AnyEvent
-sub _add_anyevent_watcher() {
+sub _add_anyevent_watcher {
     if ( $#_ != 1 ) { confess 'invalid call' }
     my ( $self, $pid ) = @_;
 
@@ -830,6 +856,41 @@ sub _add_anyevent_watcher() {
             $self->_start_queued_children();
         },
     );
+
+    return;
+}
+
+# Tests to see if something is codelike
+#
+# Borrowed from Params::Util (written by Adam Kennedy)
+sub _codelike {
+    if ( scalar(@_) != 1 ) { confess 'invalid call' }
+    my $thing = shift;
+
+    if (reftype($thing)) { return 1; }
+    if (blessed($thing) && overload::Method($thing, '()')) { return 1; }
+
+    return;
+}
+
+# Destructor emits warning if sub processes are running
+sub DEMOLISH {
+    my $self = shift;
+
+    # If we use threads, just don't print this warning because it is
+    # going to happen on parent and child threads both. We want
+    # different process IDs for this warning.
+    if ($use_threads) { return; }
+
+    # When we fork(), we might have other work unit processes hanging
+    # around
+    # XXX There should be a better way of handling this. We don't want
+    # pipes and the like held open by multiple processes.
+    if ( $self->_parent_pid != $$ ) { return; }
+
+    if ( scalar( keys %{ $self->_subprocs } ) ) {
+        warn "Warning: Subprocesses running when Parallel::WorkUnit object destroyed\n";
+    }
 
     return;
 }
