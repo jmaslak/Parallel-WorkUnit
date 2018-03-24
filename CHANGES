@@ -1,3 +1,9 @@
+1.115 - Mar 24, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Fix Windows hang
+ * Fix Windows warnings
+ * Released as DEV (TRIAL) version for CPAN Testers validation
+
 1.114 - Mar 23, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Properly handle nested workunit() calls
