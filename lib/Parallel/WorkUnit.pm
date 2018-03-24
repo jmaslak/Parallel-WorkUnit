@@ -513,6 +513,7 @@ sub _waitone {
     my ($self) = @_;
 
     my $sp = $self->_subprocs();
+    weaken $sp; # To avoid some Windows warnings
     if ( !keys(%$sp) ) { return; }
 
     if ($use_thread_queue) {
