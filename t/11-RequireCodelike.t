@@ -96,7 +96,7 @@ sub new {
 }
 
 sub execfunc {
-    return sub { 
+    return sub {
         return 42;
     };
 }
