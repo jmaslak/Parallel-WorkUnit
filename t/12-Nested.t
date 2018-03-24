@@ -27,19 +27,27 @@ alarm 120;    # It would be nice if we did this a better way, since
               # slow machine.
               # But hopefully nobody has that slow of a machine!
 
-# Instantiate the object
+my $wu = Parallel::WorkUnit->new();
+ok( defined($wu), "Constructer returned object" );
 
-like(
-    warning {
-        do {
-            my $wu = Parallel::WorkUnit->new();
-            ok( defined($wu), "Constructer returned object" );
-            $wu->queue( sub { sleep 1; } );
-        };
-    },
-    qr/Subprocesses running/,
-    "Got warning for running sub processes",
+my $wu2 = Parallel::WorkUnit->new();
+ok( defined($wu2), "Constructer returned second object" );
+
+$wu2->async( sub { sleep 1; return -9; } );
+
+$wu->async(
+    sub {
+        $wu->async( sub { return 42; } );
+        $wu2->async( sub { return -42; } );
+        return [ $wu->waitall, $wu2->waitall ];
+    }
 );
+
+my (@result) = $wu->waitall();
+is(\@result, [ [ 42, -42 ] ], "Nested work units function properly");
+
+@result = $wu2->waitall();
+is(\@result, [ -9 ], "Second waitall in main process functions properly" );
 
 done_testing();
 

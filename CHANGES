@@ -1,3 +1,11 @@
+1.114 - Mar 23, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Properly handle nested workunit() calls
+ * Adjust Demolish warning - Parent PID will no longer be the check now
+   that we can handle nesting properly - all child processes have
+   workunit variables properly cleared.
+ * Released as DEV (TRIAL) version for CPAN Testers validation
+
 1.113 - Mar 23, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Add test on queue() and async() to validate that params were coderefs

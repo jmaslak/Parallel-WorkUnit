@@ -101,6 +101,11 @@ any developer's time to look through those and choose the best one.
 
 =cut
 
+my @ALL_WU;    # Holds all active work units so child processes can't
+               # mess with parent work units
+               # Note it holds a reference (strong) to a reference
+               # (weak).
+
 subtype 'Parallel::WorkUnit::PositiveInt', as 'Int',
   where { $_ > 0 },
   message { "The number you provided, $_, was not a positive number" };
@@ -194,6 +199,12 @@ has '_queue' => (
     is       => 'rw',
     init_arg => undef
 );
+# This only gets used on Win32.
+#
+has '_child_queue' => (
+    is       => 'rw',
+    init_arg => undef
+);
 
 # This only gets used on Win32
 has '_count' => (
@@ -201,13 +212,6 @@ has '_count' => (
     isa      => 'Int',
     init_arg => undef,
     default  => 1
-);
-
-has '_parent_pid' => (
-    is       => 'rw',
-    isa      => 'Int',
-    init_arg => undef,
-    default  => $$,
 );
 
 # Children queued
@@ -237,6 +241,13 @@ sub BUILD {
     if ($use_thread_queue) {
         $self->_queue( Thread::Queue->new() );
     }
+
+    # Make a weak reference and shove it into the ALL_WU array
+    weaken $self;
+    push @ALL_WU, \$self;
+
+    # Do some housekeeping on @ALL_WU, so it is somewhat bounded
+    @ALL_WU = grep { defined $$_ } @ALL_WU;
 
     return;
 }
@@ -290,7 +301,7 @@ sub async {
     my $sub  = shift;
 
     # Test $sub to make sure it is a code ref or a sub ref
-    if (! _codelike($sub)) {
+    if ( !_codelike($sub) ) {
         croak("Parameter to async() is not a code (or codelike) reference");
     }
 
@@ -305,7 +316,7 @@ sub async {
         my $selfref = $self;
         weaken $selfref;
         $callback = sub {
-            if (defined $selfref) { # Incase this went away
+            if ( defined $selfref ) {    # Incase this went away
                 @{ $selfref->_ordered_responses }[$cbnum] = shift;
             }
         };
@@ -372,6 +383,12 @@ sub async {
 sub _child {
     if ( scalar(@_) != 4 ) { confess 'invalid call'; }
     my ( $self, $sub, $pipe, $pid ) = @_;
+
+    # Cleanup ALL_WU
+    @ALL_WU = grep { defined $$_ } @ALL_WU;
+    foreach my $wu ( map { $$_ } @ALL_WU ) {
+        $wu->_clear_all( $wu == $self );
+    }
 
     # We are in the child process
     if ($use_anyevent_pipe) {
@@ -647,7 +664,7 @@ sub queue {
     my $sub  = shift;
 
     # Test $sub to make sure it is a code ref or a sub ref
-    if (! _codelike($sub)) {
+    if ( !_codelike($sub) ) {
         croak("Parameter to queue() is not a code (or codelike) reference");
     }
 
@@ -693,7 +710,7 @@ sub _send {
     }
 
     if ($use_thread_queue) {
-        $self->_queue()->enqueue($pid);
+        $self->_child_queue()->enqueue($pid);
     }
 
     $fh->write($type);
@@ -860,6 +877,35 @@ sub _add_anyevent_watcher {
     return;
 }
 
+# Used to clear all sub-processes, etc, in child process.
+#
+# Parameter one should be the object to clear
+# Parameter 2 determines whether or not we keep _queue (saving into
+# _child_queue)
+sub _clear_all {
+    if ( $#_ != 1 ) { confess 'invalid call' }
+    my ( $self, $keep_queue ) = @_;
+
+    $self->_cv(undef);
+    $self->_last_error(undef);
+    $self->_ordered_count(0);
+    $self->_ordered_responses( [] );
+    $self->_subprocs( {} );
+    $self->_count(1);
+    $self->_queued_children( [] );
+
+    if ( defined( $self->_queue() ) ) {
+        if ($keep_queue) {
+            $self->_child_queue( $self->_queue() );
+        } else {
+            $self->_child_queue(undef);
+        }
+        $self->_queue( Thread::Queue->new() );
+    }
+
+    return;
+}
+
 # Tests to see if something is codelike
 #
 # Borrowed from Params::Util (written by Adam Kennedy)
@@ -867,8 +913,8 @@ sub _codelike {
     if ( scalar(@_) != 1 ) { confess 'invalid call' }
     my $thing = shift;
 
-    if (reftype($thing)) { return 1; }
-    if (blessed($thing) && overload::Method($thing, '()')) { return 1; }
+    if ( reftype($thing) ) { return 1; }
+    if ( blessed($thing) && overload::Method( $thing, '()' ) ) { return 1; }
 
     return;
 }
@@ -881,12 +927,6 @@ sub DEMOLISH {
     # going to happen on parent and child threads both. We want
     # different process IDs for this warning.
     if ($use_threads) { return; }
-
-    # When we fork(), we might have other work unit processes hanging
-    # around
-    # XXX There should be a better way of handling this. We don't want
-    # pipes and the like held open by multiple processes.
-    if ( $self->_parent_pid != $$ ) { return; }
 
     if ( scalar( keys %{ $self->_subprocs } ) ) {
         warn "Warning: Subprocesses running when Parallel::WorkUnit object destroyed\n";
