@@ -1,3 +1,9 @@
+1.116 - Mar 24, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Released as prod version with 1.115 fixes
+ * Require newer Test::UseAllModules (0.14 has bugs that cause tests to
+   fail)
+
 1.115 - Mar 24, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Fix Windows hang
