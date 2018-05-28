@@ -1,3 +1,7 @@
+1.118 - May 28, 2018
+Joelle Maslak <jmaslak@antelope.net>
+ * Full release version
+
 1.117 - May 28, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Added new asyncs() method to spawn a number of processes with one
