@@ -1,3 +1,7 @@
+1.202 - ????
+Joelle Maslak <jmaslak@antelope.net>
+ * Add Code of Conduct
+
 1.201 - June 4, 2018
 Joelle Maslak <jmaslak@antelope.net>
  * Remove Moose and replace with standard Perl object system to lower
