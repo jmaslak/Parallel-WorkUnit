@@ -1,9 +1,9 @@
 {{$NEXT}}
-
-1.181840  2018-07-02 21:00:13-06:00 America/Denver
  Joelle Maslak <jmaslak@antelope.net>
  * Add Code of Conduct
  * Use Dist:Zilla author plugin bundle
+ * Version major number incremented only to allow auto version plugin to
+   work properly
 
 1.201 - June 4, 2018
  Joelle Maslak <jmaslak@antelope.net>
