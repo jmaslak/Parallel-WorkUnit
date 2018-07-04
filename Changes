@@ -1,5 +1,10 @@
 {{$NEXT}}
 
+2.181850  2018-07-03 21:37:57-06:00 America/Denver
+ Joelle Maslak <jmaslak@antelope.net>
+ * Require newer Test::UseAllModules than .14 to deal with CPAN Testers
+   failure reports.
+
 2.181840  2018-07-02 21:16:55-06:00 America/Denver
  Joelle Maslak <jmaslak@antelope.net>
  * Add Code of Conduct
