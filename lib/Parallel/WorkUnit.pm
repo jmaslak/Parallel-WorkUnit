@@ -1,5 +1,5 @@
 
-# Copyright (C) 2015-2018 Joelle Maslak
+# Copyright (C) 2015-2019 Joelle Maslak
 # All Rights Reserved - See License
 #
 
@@ -25,7 +25,7 @@ my $use_anyevent_pipe;
 $use_anyevent_pipe = eval 'use AnyEvent::Util qw//; 1' if $^O eq 'MSWin32';
 ## critic
 
-my $use_threads;
+our $use_threads;
 ## no critic (BuiltinFunctions::ProhibitStringyEval)
 $use_threads = eval 'use threads qw//; 1' if ( ( $^O eq 'MSWin32' ) && ( !$use_anyevent_pipe ) );
 ## critic
@@ -90,6 +90,13 @@ use namespace::autoclean;
   $wu->use_anyevent(1);
   $wu->async( sub { ... }, \&callback );
   $wu->waitall();  # Not strictly necessary
+
+  #
+  # Just spawn something into another process, don't capture return
+  # values, don't allow waiting on process, etc.
+  #
+  my $wu = Parallel::Workunit->new();
+  $wu->start( { ... } );
 
 =head1 DESCRIPTION
 
@@ -1091,6 +1098,38 @@ sub _clear_all {
     return;
 }
 
+=method start( sub { ... } );
+
+Spawns work on a new forked process, doing so immediately regardless of how
+many other children are running.
+
+This method is similar to C<async()>, but unlike C<async()>, no provision to
+receive return value or wait on the child is made.  This is somewhat similar
+to C<start> in Perl 6 (but differs as this starts a subprocess, not a new
+thread (except on Windows), and there is thus no shared data (changes to data
+in the child process will not be seen in the parent process).
+
+Note that the child inherits all open file descriptors.
+
+Not also that the child process will be part of the same process group as the
+parent process.  Additional work is required to daemonize the child.
+
+=cut
+
+sub start {
+    if ( $#_ != 1 ) { confess 'invalid call'; }
+    my $self = shift;
+    my $sub  = shift;
+
+    # Test $sub to make sure it is a code ref or a sub ref
+    if ( !_codelike($sub) ) {
+        croak("Parameter to start() is not a code (or codelike) reference");
+    }
+
+    $self->_start_child($sub);
+}
+
+
 # Tests to see if something is codelike
 #
 # Borrowed from Params::Util (written by Adam Kennedy)
@@ -1102,6 +1141,29 @@ sub _codelike {
     if ( blessed($thing) && overload::Method( $thing, '()' ) ) { return 1; }
 
     return;
+}
+
+# Start sub process and/or thread
+#
+sub _start_child {
+    if ( $#_ != 1 ) { confess 'invalid call'; }
+    my ( $self, $sub ) = @_;
+
+    if ($use_threads) {
+        my $thr = threads->create( $sub );
+        if ( !defined($thr) ) { die "thread creation failed: $!"; }
+
+        # Windows doesn't do fork(), it does threads...
+        return;
+    } else {
+        my $pid = fork();
+
+        if (! $pid) {
+            # We are in the child process.
+            $sub->();
+            exit();
+        }
+    }
 }
 
 # Destructor emits warning if sub processes are running
