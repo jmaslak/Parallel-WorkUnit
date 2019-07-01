@@ -149,7 +149,7 @@ sub use_anyevent {
 
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -162,7 +162,7 @@ sub _cv {
         $self->{_cv} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -175,7 +175,7 @@ sub _last_error {
         $self->{_last_error} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -193,7 +193,7 @@ sub _ordered_count {
         $self->{_ordered_count} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -211,7 +211,7 @@ sub _ordered_responses {
         $self->{_ordered_responses} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -263,7 +263,7 @@ sub max_children {
 
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -281,7 +281,7 @@ sub _subprocs {
         $self->{_subprocs} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -294,7 +294,7 @@ sub _queue {
         $self->{_queue} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -307,7 +307,7 @@ sub _child_queue {
         $self->{_child_queue} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -326,7 +326,7 @@ sub _count {
         $self->{_count} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -340,7 +340,7 @@ sub _parent_pid {
         $self->{_parent_pid} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -359,7 +359,7 @@ sub _queued_children {
         $self->{_queued_children} = $val;
         return $val;
     } else {
-        croak("Invalid call");
+        confess("Invalid call");
     }
 }
 
@@ -447,7 +447,7 @@ sub async {
 
     # Test $sub to make sure it is a code ref or a sub ref
     if ( !_codelike($sub) ) {
-        croak("Parameter to async() is not a code (or codelike) reference");
+        confess("Parameter to async() is not a code (or codelike) reference");
     }
 
     my $callback;
@@ -564,10 +564,10 @@ sub asyncs {
     my $self     = shift;
     my $children = shift;
     my $sub      = shift;
-    if ( scalar(@_) > 1 ) { croak("invalid call"); }
+    if ( scalar(@_) > 1 ) { confess("invalid call"); }
 
     if ( $children !~ m/^[1-9][0-9]*$/s ) {
-        croak("Number of children must be a numeric value > 0");
+        confess("Number of children must be a numeric value > 0");
     }
 
     for ( my $i = 0; $i < $children; $i++ ) {
@@ -855,7 +855,7 @@ sub queue {
 
     # Test $sub to make sure it is a code ref or a sub ref
     if ( !_codelike($sub) ) {
-        croak("Parameter to queue() is not a code (or codelike) reference");
+        confess("Parameter to queue() is not a code (or codelike) reference");
     }
 
     my $callback;
@@ -1123,10 +1123,10 @@ sub start {
 
     # Test $sub to make sure it is a code ref or a sub ref
     if ( !_codelike($sub) ) {
-        croak("Parameter to start() is not a code (or codelike) reference");
+        confess("Parameter to start() is not a code (or codelike) reference");
     }
 
-    $self->_start_child($sub);
+    _start_child($sub);
 }
 
 
@@ -1146,8 +1146,8 @@ sub _codelike {
 # Start sub process and/or thread
 #
 sub _start_child {
-    if ( $#_ != 1 ) { confess 'invalid call'; }
-    my ( $self, $sub ) = @_;
+    if ( $#_ != 0 ) { confess 'invalid call'; }
+    my ( $sub ) = @_;
 
     if ($use_threads) {
         my $thr = threads->create( $sub );

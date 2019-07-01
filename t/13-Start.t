@@ -14,7 +14,6 @@ use Carp;
 
 use Test2::V0;
 
-use Parallel::WorkUnit;
 use Symbol;
 
 # Set Timeout
@@ -25,19 +24,46 @@ alarm 120;    # It would be nice if we did this a better way, since
               # slow machine.
               # But hopefully nobody has that slow of a machine!
 
-my $wu = Parallel::WorkUnit->new();
-ok( defined($wu), "Constructer returned object" );
+#
+# Test with OO model
+#
+{
+    use Parallel::WorkUnit qw(start);
+    my $wu = Parallel::WorkUnit->new();
+    ok( defined($wu), "Constructer returned object" );
 
-pipe my $rfh, my $wfh;
+    pipe my $rfh, my $wfh;
 
-$wu->start( sub { print $wfh "TeStInG\n"; } );
+    $wu->start( sub { print $wfh "TeStInG\n"; } );
 
-while (my $result = <$rfh>) {
-    chomp $result;
-    is($result, 'TeStInG', "Child process ran properly");
-    last;
+    while (my $result = <$rfh>) {
+        chomp $result;
+        is($result, 'TeStInG', "Child process 1 ran properly");
+        last;
+    }
+    $wu->start( sub { print $wfh "TeStInG\n"; } );
+
+    close $rfh;
 }
-close $rfh;
+
+
+#
+# Test without OO model
+#
+{
+    use Parallel::WorkUnit::Procedural qw(:all);
+    pipe my $rfh, my $wfh;
+
+    start( sub { print $wfh "TeStInG\n"; } );
+
+    while (my $result = <$rfh>) {
+        chomp $result;
+        is($result, 'TeStInG', "Child process 2 ran properly");
+        last;
+    }
+
+    close $rfh;
+}
 
 done_testing();
 
