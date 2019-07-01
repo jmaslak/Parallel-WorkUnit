@@ -14,11 +14,11 @@ use warnings;
 use autodie;
 
 require Exporter;
-our @ISA = qw(Exporter);
+our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(
-    async asyncs proc_count proc_wait queue start waitall waitone WorkUnit
+  async asyncs proc_count proc_wait queue start waitall waitone WorkUnit
 );
-our %EXPORT_TAGS = ( all => [ @EXPORT_OK ] );
+our %EXPORT_TAGS = ( all => [@EXPORT_OK] );
 
 use Carp;
 use Parallel::WorkUnit;
@@ -98,6 +98,7 @@ used to access attributes such as C<max_children> and C<use_anyevent>.
 =cut
 
 my $wu = Parallel::WorkUnit->new();
+
 sub WorkUnit() {
     $wu = Parallel::WorkUnit->new() if !defined($wu);
     return $wu;

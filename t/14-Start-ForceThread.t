@@ -38,9 +38,9 @@ pipe my $rfh, my $wfh;
 
 $wu->start( sub { print $wfh "TeStInG\n"; close $wfh } );
 
-while (my $result = <$rfh>) {
+while ( my $result = <$rfh> ) {
     chomp $result;
-    is($result, 'TeStInG', "Child process ran properly");
+    is( $result, 'TeStInG', "Child process ran properly" );
     last;
 }
 close $rfh;

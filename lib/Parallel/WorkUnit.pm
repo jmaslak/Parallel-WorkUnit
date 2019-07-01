@@ -590,8 +590,7 @@ sub _child {
     try {
         my $result = $sub->();
         $self->_send_result( $pipe, $result, $pid );
-    }
-    catch {
+    } catch {
         $self->_send_error( $pipe, $_, $pid );
     };
 
@@ -1129,7 +1128,6 @@ sub start {
     _start_child($sub);
 }
 
-
 # Tests to see if something is codelike
 #
 # Borrowed from Params::Util (written by Adam Kennedy)
@@ -1147,10 +1145,10 @@ sub _codelike {
 #
 sub _start_child {
     if ( $#_ != 0 ) { confess 'invalid call'; }
-    my ( $sub ) = @_;
+    my ($sub) = @_;
 
     if ($use_threads) {
-        my $thr = threads->create( $sub );
+        my $thr = threads->create($sub);
         if ( !defined($thr) ) { die "thread creation failed: $!"; }
 
         # Windows doesn't do fork(), it does threads...
@@ -1158,7 +1156,7 @@ sub _start_child {
     } else {
         my $pid = fork();
 
-        if (! $pid) {
+        if ( !$pid ) {
             # We are in the child process.
             $sub->();
             exit();

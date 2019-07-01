@@ -28,7 +28,7 @@ use Parallel::WorkUnit::Procedural qw(:all);
 
 is( proc_count, 0, "no processes running before spawning any" );
 
-my $wu; # XXX
+my $wu;       # XXX
 
 # We're going to spawn 10 children and test the return value
 my $PROCS = 10;
@@ -130,12 +130,12 @@ proc_wait($pid);
 pass("Duplicate wait() call exits properly");
 waitall;
 pass("Unnecessary waitall() call exits properly");
-ok( !defined( waitone ), 'Unnecessary waitone() call exits properly' );
+ok( !defined(waitone), 'Unnecessary waitone() call exits properly' );
 
 # Do a test with the callback of async()
 my $result;
 async sub { 0 }, sub { $result = 555 };
 waitall;
-is($result, 555, "Result from async() with callback");
+is( $result, 555, "Result from async() with callback" );
 
 done_testing;

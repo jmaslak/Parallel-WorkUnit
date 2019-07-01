@@ -36,16 +36,15 @@ alarm 120;    # It would be nice if we did this a better way, since
 
     $wu->start( sub { print $wfh "TeStInG\n"; } );
 
-    while (my $result = <$rfh>) {
+    while ( my $result = <$rfh> ) {
         chomp $result;
-        is($result, 'TeStInG', "Child process 1 ran properly");
+        is( $result, 'TeStInG', "Child process 1 ran properly" );
         last;
     }
     $wu->start( sub { print $wfh "TeStInG\n"; } );
 
     close $rfh;
 }
-
 
 #
 # Test without OO model
@@ -56,9 +55,9 @@ alarm 120;    # It would be nice if we did this a better way, since
 
     start( sub { print $wfh "TeStInG\n"; } );
 
-    while (my $result = <$rfh>) {
+    while ( my $result = <$rfh> ) {
         chomp $result;
-        is($result, 'TeStInG', "Child process 2 ran properly");
+        is( $result, 'TeStInG', "Child process 2 ran properly" );
         last;
     }
 
