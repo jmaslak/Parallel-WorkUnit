@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.191820  2019-06-30 22:24:31-06:00 America/Denver (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
  * Add procedural interface (see Parallel::WorkUnit::Procedural)
  * Add start() block (async() without any internal accounting or ability
