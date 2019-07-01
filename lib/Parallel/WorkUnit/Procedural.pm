@@ -88,6 +88,8 @@ interactions may occur (it is a global singleton, after all!).
 Please read the documentation on L<Parallel::WorkUnit> for detailed information
 about this module.
 
+This module was added to the Parallel-WorkUnit distribution in 1.191810.
+
 =cut
 
 =sub WorkUnit

@@ -1099,6 +1099,8 @@ sub _clear_all {
 
 =method start( sub { ... } );
 
+Added in 1.191810.
+
 Spawns work on a new forked process, doing so immediately regardless of how
 many other children are running.
 
