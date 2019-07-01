@@ -92,7 +92,7 @@ This module was added to the Parallel-WorkUnit distribution in 1.191810.
 
 =cut
 
-=sub WorkUnit
+=func WorkUnit
 
 Returns the singleton Parallel::WorkUnit used by this module.  This can be
 used to access attributes such as C<max_children> and C<use_anyevent>.
@@ -106,7 +106,7 @@ sub WorkUnit() {
     return $wu;
 }
 
-=sub async { ... }, \&callback
+=func async { ... }, \&callback
 
   async sub { return 1 } \&callback;
 
@@ -120,7 +120,7 @@ This executes C<Parallel::WorkUnit->async()>
 
 sub async(&;&) { return WorkUnit->async(@_) }
 
-=sub asyncs( $children, sub { ... }, \&callback )
+=func asyncs( $children, sub { ... }, \&callback )
 
 Executes C<Parallel::WorkUnit->asyncs() }
 
@@ -128,7 +128,7 @@ Executes C<Parallel::WorkUnit->asyncs() }
 
 sub asyncs { return WorkUnit->asyncs(@_) }
 
-=sub waitall
+=func waitall
 
 Executes C<Parallel::WorkUnit->waitall()>
 
@@ -136,7 +136,7 @@ Executes C<Parallel::WorkUnit->waitall()>
 
 sub waitall() { return WorkUnit->waitall() }
 
-=sub waitone
+=func waitone
 
 Executes C<Parallel::WorkUnit->waitone()>
 
@@ -144,15 +144,15 @@ Executes C<Parallel::WorkUnit->waitone()>
 
 sub waitone { return WorkUnit->waitone(@_) }
 
-=sub proc_wait($pid)
+=func proc_wait($pid)
 
 Executes C<Parallel::WorkUnit->wait()>
 
 =cut
 
-sub proc_wait { WorkUnit->wait(@_) }
+sub proc_wait { return WorkUnit->wait(@_) }
 
-=sub proc_count()
+=func proc_count()
 
 Executes C<Parallel::WorkUnit->count()>
 
@@ -160,7 +160,7 @@ Executes C<Parallel::WorkUnit->count()>
 
 sub proc_count() { return WorkUnit->count() }
 
-=sub queue sub { ... }, \&callback
+=func queue sub { ... }, \&callback
 
 Executes C<Parallel::WorkUnit->queue()>
 
@@ -168,7 +168,7 @@ Executes C<Parallel::WorkUnit->queue()>
 
 sub queue { return WorkUnit->queue(@_) }
 
-=sub start { ... };
+=func start { ... };
 
 This executes C<Parallel::WorkUnit->start()>
 

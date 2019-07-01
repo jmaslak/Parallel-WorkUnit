@@ -1128,6 +1128,7 @@ sub start {
     }
 
     _start_child($sub);
+    return;
 }
 
 # Tests to see if something is codelike
