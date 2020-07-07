@@ -40,7 +40,11 @@ SKIP: {
 
     $wu->async( sub { qr{xxx} }, sub { $result = shift; } );
 
-    dies_ok { $wu->waitall(); } 'Child throws a storable error for regex';
+    like(
+        dies { $wu->waitall(); },
+        qr/Can't store REGEXP items/,
+        'Child throws a storable error for regex',
+    );
 }
 
 $wu->async(
