@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.202150  2020-08-02 23:16:52+00:00 UTC (TRIAL RELEASE)
   Joelle Maslak <jmaslak@antelope.net>
  * [bugfix] AnyEvent no longer erroniously required
  * [bugfix] use_anyevent => <val> passed to constructor now honored
