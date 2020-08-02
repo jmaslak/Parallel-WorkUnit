@@ -1,5 +1,6 @@
 {{$NEXT}}
  - [bugfix] AnyEvent no longer erroniously required
+ - [bugfix] use_anyevent => <val> passed to constructor now honored
 
 2.201890  2020-07-07 02:19:50+00:00 UTC
  - Migrated testing to Test2
