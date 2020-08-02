@@ -1,4 +1,5 @@
 {{$NEXT}}
+ - [bugfix] AnyEvent no longer erroniously required
 
 2.201890  2020-07-07 02:19:50+00:00 UTC
  - Migrated testing to Test2
