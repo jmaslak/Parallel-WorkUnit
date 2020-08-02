@@ -1,5 +1,5 @@
 
-# Copyright (C) 2015-2019 Joelle Maslak
+# Copyright (C) 2015-2020 Joelle Maslak
 # All Rights Reserved - See License
 #
 
