@@ -462,7 +462,7 @@ sub async {
         # We are in the child process
         $pipe = $pipe->[1];
 
-        return $self->_child( $sub, $pipe, undef );
+        return $self->_child( $sub, $pipe );
     }
 }
 
@@ -513,20 +513,20 @@ sub asyncs {
 }
 
 sub _child {
-    if ( scalar(@_) != 4 ) { confess 'invalid call'; }
-    my ( $self, $sub, $pipe, $pid ) = @_;
+    if ( scalar(@_) != 3 ) { confess 'invalid call'; }
+    my ( $self, $sub, $pipe ) = @_;
 
     # Cleanup ALL_WU
     @ALL_WU = grep { defined $$_ } @ALL_WU;
     foreach my $wu ( map { $$_ } @ALL_WU ) {
-        $wu->_clear_all( $wu == $self );
+        $wu->_clear_all();
     }
 
     try {
         my $result = $sub->();
-        $self->_send_result( $pipe, $result, $pid );
+        $self->_send_result( $pipe, $result );
     } catch {
-        $self->_send_error( $pipe, $_, $pid );
+        $self->_send_error( $pipe, $_ );
     };
 
     exit();
@@ -780,22 +780,22 @@ sub queue {
 }
 
 sub _send_result {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $msg, $pid ) = @_;
+    if ( $#_ != 2 ) { confess 'invalid call'; }
+    my ( $self, $fh, $msg ) = @_;
 
-    return $self->_send( $fh, 'RESULT', $msg, $pid );
+    return $self->_send( $fh, 'RESULT', $msg );
 }
 
 sub _send_error {
-    if ( $#_ != 3 ) { confess 'invalid call'; }
-    my ( $self, $fh, $err, $pid ) = @_;
+    if ( $#_ != 2 ) { confess 'invalid call'; }
+    my ( $self, $fh, $err ) = @_;
 
-    return $self->_send( $fh, 'ERROR', $err, $pid );
+    return $self->_send( $fh, 'ERROR', $err );
 }
 
 sub _send {
-    if ( $#_ != 4 ) { confess 'invalid call'; }
-    my ( $self, $fh, $type, $data, $pid ) = @_;
+    if ( $#_ != 3 ) { confess 'invalid call'; }
+    my ( $self, $fh, $type, $data ) = @_;
 
     my $msg = Storable::freeze( \$data );
 
@@ -962,13 +962,9 @@ sub _add_anyevent_watcher {
 }
 
 # Used to clear all sub-processes, etc, in child process.
-#
-# Parameter one should be the object to clear
-# Parameter 2 determines whether or not we keep _queue (saving into
-# _child_queue)
 sub _clear_all {
-    if ( $#_ != 1 ) { confess 'invalid call' }
-    my ( $self, $keep_queue ) = @_;
+    if ( $#_ != 0 ) { confess 'invalid call' }
+    my ( $self ) = @_;
 
     $self->_cv(undef);
     $self->_last_error(undef);
