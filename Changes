@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.202160  2020-08-03 01:47:35+00:00 UTC (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
  * [bugfix] Remove requirement for Thread::Queue
  * Trial Release
