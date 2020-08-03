@@ -1,7 +1,10 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * [bugfix] Remove requirement for Thread::Queue
+ * Trial Release
 
 2.202150  2020-08-02 23:16:52+00:00 UTC (TRIAL RELEASE)
-  Joelle Maslak <jmaslak@antelope.net>
+ Joelle Maslak <jmaslak@antelope.net>
  * [bugfix] AnyEvent no longer erroniously required
  * [bugfix] use_anyevent => <val> passed to constructor now honored
  * [bugfix] max_children => <val> passed to constructor now honored
