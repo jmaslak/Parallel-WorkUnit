@@ -8,7 +8,7 @@ Parallel::WorkUnit - Provide multi-paradigm forking with ability to pass back da
 
 =head1 VERSION
 
-version 2.202160
+version 2.202230
 
 =head1 SYNOPSIS
 
@@ -259,7 +259,7 @@ many other children are running.
 
 This method is similar to C<async()>, but unlike C<async()>, no provision to
 receive return value or wait on the child is made.  This is somewhat similar
-to C<start> in Perl 6 (but differs as this starts a subprocess, not a new
+to C<start> in Raku (but differs as this starts a subprocess, not a new
 thread, and there is thus no shared data (changes to data in the child process
 will not be seen in the parent process).
 

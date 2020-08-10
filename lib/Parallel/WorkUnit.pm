@@ -991,7 +991,7 @@ many other children are running.
 
 This method is similar to C<async()>, but unlike C<async()>, no provision to
 receive return value or wait on the child is made.  This is somewhat similar
-to C<start> in Perl 6 (but differs as this starts a subprocess, not a new
+to C<start> in Raku (but differs as this starts a subprocess, not a new
 thread, and there is thus no shared data (changes to data in the child process
 will not be seen in the parent process).
 
@@ -1012,7 +1012,14 @@ sub start {
         confess("Parameter to start() is not a code (or codelike) reference");
     }
 
-    _start_child($sub);
+    my $pid = fork();
+
+    if ( !$pid ) {
+        # We are in the child process.
+        $sub->();
+        exit();
+    }
+
     return;
 }
 
@@ -1027,21 +1034,6 @@ sub _codelike {
     if ( blessed($thing) && overload::Method( $thing, '()' ) ) { return 1; }
 
     return;
-}
-
-# Start sub process
-#
-sub _start_child {
-    if ( $#_ != 0 ) { confess 'invalid call'; }
-    my ($sub) = @_;
-
-    my $pid = fork();
-
-    if ( !$pid ) {
-        # We are in the child process.
-        $sub->();
-        exit();
-    }
 }
 
 # Destructor emits warning if sub processes are running
