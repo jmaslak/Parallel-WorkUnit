@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.202270  2020-08-14 21:19:08+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
  * [bugfix] No longer bring in AnyEvent as a recommended dependency
  * [bugfix] Eliminate warning during tests on Windows

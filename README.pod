@@ -8,7 +8,7 @@ Parallel::WorkUnit - Provide multi-paradigm forking with ability to pass back da
 
 =head1 VERSION
 
-version 2.202230
+version 2.202270
 
 =head1 SYNOPSIS
 
