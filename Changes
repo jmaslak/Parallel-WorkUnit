@@ -1,4 +1,7 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * [bugfix] No longer bring in AnyEvent as a recommended dependency
+ * [bugfix] Eliminate warning during tests on Windows
 
 2.202230  2020-08-10 00:57:22+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
