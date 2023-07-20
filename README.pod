@@ -268,15 +268,6 @@ Note that the child inherits all open file descriptors.
 Not also that the child process will be part of the same process group as the
 parent process.  Additional work is required to daemonize the child.
 
-=head1 CAVEAT
-
-Because information passed back from the asyncronous processes is sent
-serialized and sent through a pipe, it is not possible at this time to
-return all the rich data structures Perl has. In particular, you cannot
-return C<REGEXP>, C<CODE>, or C<OBJECT> references (note that C<OBJECT>
-should not be confused with Perl objects created without the "class"
-keyword introduced experimentally in Perl 5.38).
-
 =head1 AUTHOR
 
 Joelle Maslak <jmaslak@antelope.net>
