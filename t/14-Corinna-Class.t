@@ -53,8 +53,8 @@ SKIP: {
 
 class baz {
     field $x : param;
-    method x() { return $x }
-    method FREEZE() { return $x }
+    method x { return $x }
+    method FREEZE { return $x }
     sub THAW {
         my ($class, $data) = @_;
         $class->new( x => $data );
