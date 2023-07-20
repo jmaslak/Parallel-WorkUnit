@@ -1,4 +1,8 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * Add tests for class objects on 5.38+
+ * Add documentation caveats about class objects (and also CODE
+   and REGEXP references)
 
 2.202270  2020-08-14 21:19:08+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
