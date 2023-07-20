@@ -53,18 +53,20 @@ SKIP: {
 
 class baz {
     field $x : param;
+    method x() { return $x }
     method FREEZE() { return $x }
     sub THAW {
         my ($class, $data) = @_;
         $class->new( x => $data );
     }
 }
-$x = baz->new( x => 2 );
 
-$wu->async(sub { $x }, sub { $result = shift; } );
+$x = baz->new( x => 3 );
+$wu->async(sub { return $x }, sub { $result = shift; } );
+$x = undef;
 
-$wu->waitall();
 ok( lives { $wu->waitall(); }, "Can store a class object with FREEZE" );
+is($result->x, 3, "Object properly created");
 
 done_testing();
 
