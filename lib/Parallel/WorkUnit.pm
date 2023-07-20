@@ -24,8 +24,6 @@ use Scalar::Util qw(blessed reftype weaken);
 use Storable;
 use Try::Tiny;
 
-use namespace::autoclean;
-
 =head1 SYNOPSIS
 
   #
@@ -71,7 +69,20 @@ use namespace::autoclean;
 
   $wu->use_anyevent(1);
   $wu->async( sub { ... }, \&callback );
-  $wu->waitall();  # Not strictly necessary
+  $wu->waitall();  # Not strictly necessary, callbacks happen within event loop
+
+
+  #
+  # IO::Async Interface (only usable if IO::Async is installed)
+  #
+  use IO::Async::Loop;
+  my $loop = IO::Async::Loop->new;
+  my $wu = Parallel::WorkUnit->new();
+
+  $wu->use_io_async($loop);
+  $wu->async( sub { ... }, \&callback );
+  $loop->run;
+
 
   #
   # Just spawn something into another process, don't capture return
@@ -89,8 +100,10 @@ the information, serialized, back).  It was designed to be very simple
 for a developer to use, with the ability to pass reasonably large amounts
 of data back to the parent process.
 
-This module is also designed to work with AnyEvent when desired, but it
-does not require AnyEvent to be installed for other functionality to work.
+This module is also designed to work with AnyEvent or IO::Async (preferred
+for new code) when desired, but it does not require AnyEvent or IO::Async
+to be installed for other functionality to
+work.
 
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
@@ -135,9 +148,46 @@ sub use_anyevent {
 
         my ($old_val) = $self->{use_anyevent};
         $self->{use_anyevent} = $val;
+        $self->use_io_async(undef) if $val;
 
         # Trigger
         $self->_set_anyevent( $val, $old_val );
+
+        return $val;
+    } else {
+        confess("Invalid call");
+    }
+}
+
+
+=attr use_io_async
+
+  $wu->use_io_async($loop);
+
+When set to an IO::Async::Loop, creates IO::Async watchers for each
+asyncronous or queued job.  The equivilent of an C<IO::Async> condition
+variable C<recv()>, used when all processes finish executing, is the
+C<waitall()> method.  However, the processes are integrated into a
+standard C<IO::Async> loop, so it isn't strictly necessary to call C<waitall()>.
+In addition, a call to C<waitall()> will execute other processes in
+the C<IO::Async> event loop.
+
+The default value is false.
+
+=cut
+
+sub use_io_async {
+    if ( $#_ == 0 ) {
+        return shift->{use_io_async};
+    } elsif ( $#_ == 1 ) {
+        my ( $self, $val ) = @_;
+
+        my ($old_val) = $self->{use_io_async};
+        $self->{use_io_async} = $val;
+        $self->use_anyevent(undef) if $val;
+
+        # Trigger
+        $self->_set_io_async( $val, $old_val );
 
         return $val;
     } else {
@@ -152,6 +202,19 @@ sub _cv {
     } elsif ( $#_ == 1 ) {
         my ( $self, $val ) = @_;
         $self->{_cv} = $val;
+        return $val;
+    } else {
+        confess("Invalid call");
+    }
+}
+
+# XXX: Add validation that _future is a Maybe[IO::Async::Future]
+sub _future {
+    if ( $#_ == 0 ) {
+        return shift->{_future};
+    } elsif ( $#_ == 1 ) {
+        my ( $self, $val ) = @_;
+        $self->{_future} = $val;
         return $val;
     } else {
         confess("Invalid call");
@@ -363,6 +426,9 @@ sub new {
         if (exists $args{use_anyevent}) {
             $self->use_anyevent($args{use_anyevent});
         }
+        if (exists $args{use_io_async}) {
+            $self->use_io_async($args{use_io_async});
+        }
         if (exists $args{max_children}) {
             $self->max_children($args{max_children});
         }
@@ -430,7 +496,7 @@ sub async {
         my $selfref = $self;
         weaken $selfref;
         $callback = sub {
-            if ( defined $selfref ) {    # Incase this went away
+            if ( defined $selfref ) {    # In case this went away
                 @{ $selfref->_ordered_responses }[$cbnum] = shift;
             }
         };
@@ -455,7 +521,7 @@ sub async {
 
         $self->_subprocs()->{$pid} = {
             fh       => $pipe,
-            anyevent => undef,
+            watcher  => undef,
             callback => $callback,
             caller   => [ caller() ],
         };
@@ -463,6 +529,11 @@ sub async {
         # Set up anyevent listener if appropriate
         if ( $self->use_anyevent() ) {
             $self->_add_anyevent_watcher($pid);
+        }
+
+        # Set up IO::Async listener if appropriate
+        if ( $self->use_io_async() ) {
+            $self->_add_io_async_watcher($pid);
         }
 
         return $pid;
@@ -568,14 +639,32 @@ sub waitall {
     if ( scalar( keys %{ $self->_subprocs } ) == 0 ) {
         if ( $self->use_anyevent ) {
             $self->_cv( AnyEvent->condvar );
+            $self->_future(undef);
+        }
+        if ( $self->use_io_async ) {
+            $self->_future( $self->use_io_async->new_future() );
+            $self->_cv(undef);
         }
 
         return $self->_get_and_reset_ordered_responses();
     }
 
-    # Using AnyEvent?
+    # Using cv?
     if ( defined( $self->_cv ) ) {
         $self->_cv->recv();
+        if ( defined( $self->_last_error ) ) {
+            my $err = $self->_last_error;
+            $self->_last_error(undef);
+
+            die($err);
+        }
+
+        return $self->_get_and_reset_ordered_responses();
+    }
+
+    # Using Futures?
+    if ( defined( $self->_future) ) {
+        $self->_future->get();
         if ( defined( $self->_last_error ) ) {
             my $err = $self->_last_error;
             $self->_last_error(undef);
@@ -624,7 +713,7 @@ sub waitone {
 
     my $rv = $self->_waitone();
 
-    # Using AnyEvent?
+    # Using AnyEvent/IO::Async?
     if ( defined( $self->_last_error ) ) {
         my $err = $self->_last_error;
         $self->_last_error(undef);
@@ -636,7 +725,7 @@ sub waitone {
 }
 
 # Meat of waitone (but doesn't handle returning an exception when using
-# anyevent)
+# anyevent / IO::Async)
 sub _waitone {
     if ( $#_ != 0 ) { confess 'invalid call'; }
     my ($self) = @_;
@@ -703,7 +792,7 @@ sub wait {
     return $rv;
 }
 
-# Internal version that doesn't check for AnyEvent die needs
+# Internal version that doesn't check for AnyEvent/IO::Async die needs
 sub _wait {
     if ( $#_ != 1 ) { confess 'invalid call'; }
     my ( $self, $pid ) = @_;
@@ -836,6 +925,65 @@ sub _read_result {
     my ( $self, $child ) = @_;
 
     my $cinfo = $self->_subprocs()->{$child};
+    if (defined($cinfo->{rawbuff})) {
+        return $self->_read_result_from_buffer($child);
+    } else {
+        return $self->_read_result_from_fh($child);
+    }
+}
+
+sub _read_result_from_buffer {
+    if ( $#_ != 1 ) { confess 'invalid call'; }
+    my ( $self, $child ) = @_;
+
+    my $cinfo = $self->_subprocs()->{$child};
+    $cinfo->{fh}->close();
+
+    my ($type, $size, $buffer) = split /\n/, $cinfo->{rawbuff}, 3;
+    delete $cinfo->{rawbuff};
+
+    if ( !defined($type) ) { die 'Could not read child data'; }
+    if ( !defined($size) ) { die 'Could not read child data'; }
+
+    my ($class, $frozen) = split("!::!", $buffer, 2);
+    my $data;
+    if ($class eq "") {
+        $data = ${ Storable::thaw($frozen) };
+    } else {
+        $data = $class->THAW($frozen);
+    }
+
+
+    my $caller = $self->_subprocs()->{$child}{caller};
+    delete $self->_subprocs()->{$child};
+
+    if ( $type eq 'RESULT' ) {
+        $cinfo->{callback}->($data);
+    } else {
+        my $err =
+            "Child (created at "
+          . $caller->[1]
+          . " line "
+          . $caller->[2]
+          . ") died with error: $data";
+
+        if ( $self->use_anyevent || $self->use_io_async ) {
+            # Can't throw events with anyevent / IO::Async
+            $self->_last_error($err);
+        } else {
+            # Otherwise we do throw it
+            die($err);
+        }
+    }
+
+    return;
+}
+
+sub _read_result_from_fh {
+    if ( $#_ != 1 ) { confess 'invalid call'; }
+    my ( $self, $child ) = @_;
+
+    my $cinfo = $self->_subprocs()->{$child};
     my $fh    = $cinfo->{fh};
 
     my $type = <$fh>;
@@ -858,7 +1006,7 @@ sub _read_result {
         if ( defined($ret) ) { $result .= $part; }
     }
 
-    my ($class, $frozen) = split("!::!", $result);
+    my ($class, $frozen) = split("!::!", $result, 2);
     my $data;
     if ($class eq "") {
         $data = ${ Storable::thaw($frozen) };
@@ -880,8 +1028,8 @@ sub _read_result {
           . $caller->[2]
           . ") died with error: $data";
 
-        if ( $self->use_anyevent ) {
-            # Can't throw events with anyevent
+        if ( $self->use_anyevent || $self->use_io_async ) {
+            # Can't throw events with anyevent / IO::Async
             $self->_last_error($err);
         } else {
             # Otherwise we do throw it
@@ -938,6 +1086,7 @@ sub _set_anyevent {
         }
 
         $self->_cv( AnyEvent->condvar );
+        $self->_future( undef );
 
     } elsif ( $old && ( !$new ) ) {
         # We are tearing down AnyEvent
@@ -946,11 +1095,46 @@ sub _set_anyevent {
             foreach my $pid ( keys %{ $self->_subprocs() } ) {
                 my $proc = $self->_subprocs()->{$pid};
 
-                $proc->{anyevent} = undef;
+                $proc->{watcher} = undef;
             }
         }
 
         $self->_cv(undef);
+    }
+    return;
+}
+
+# Sets up IO::Async or tears it down as needed
+sub _set_io_async {
+    if ( $#_ < 1 ) { confess 'invalid call' }
+    if ( $#_ > 2 ) { confess 'invalid call' }
+    my ( $self, $new, $old ) = @_;
+
+    if ( ( !$old ) && $new ) {
+        # We are setting up IO::Async
+        require IO::Async::Stream;
+
+        if ( defined( $self->_subprocs() ) ) {
+            foreach my $pid ( keys %{ $self->_subprocs() } ) {
+                $self->_add_io_async_watcher($pid);
+            }
+        }
+
+        $self->_cv( undef );
+        $self->_future( $new->new_future );
+
+    } elsif ( $old && ( !$new ) ) {
+        # We are tearing down IO::Async
+
+        if ( defined( $self->_subprocs() ) ) {
+            foreach my $pid ( keys %{ $self->_subprocs() } ) {
+                my $proc = $self->_subprocs()->{$pid};
+
+                $proc->{watcher} = undef;
+            }
+        }
+
+        $self->_future(undef);
     }
     return;
 }
@@ -962,7 +1146,7 @@ sub _add_anyevent_watcher {
 
     my $proc = $self->_subprocs()->{$pid};
 
-    $proc->{anyevent} = AnyEvent->io(
+    $proc->{watcher} = AnyEvent->io(
         fh   => $proc->{fh},
         poll => 'r',
         cb   => sub {
@@ -981,12 +1165,48 @@ sub _add_anyevent_watcher {
     return;
 }
 
+# Sets up the listener for IO::Async
+sub _add_io_async_watcher {
+    if ( $#_ != 1 ) { confess 'invalid call' }
+    my ( $self, $pid ) = @_;
+
+    my $proc = $self->_subprocs()->{$pid};
+
+    $proc->{watcher} = IO::Async::Stream->new(
+        read_handle       => $proc->{fh},
+        close_on_read_eof => undef,
+        on_read           => sub {
+            my ($obj, $buffref, $eof) = @_;
+            $proc->{rawbuff} = $$buffref;
+
+            my ($type, $size, $buffer) = split /\n/, $$buffref, 3;
+            if ($eof or (defined($buffer) && length($buffer) == $size)) {
+                $self->_wait($pid);
+                if ( scalar( keys %{ $self->_subprocs() } ) == 0 ) {
+                    my $oldfuture = $self->_future;
+                    $self->_future( $self->use_io_async->new_future );
+                    $oldfuture->done();
+                }
+
+                # Start queued children, if needed
+                $self->_start_queued_children();
+            }
+
+            return 0;
+        },
+    );
+    $self->use_io_async->add($proc->{watcher});
+
+    return;
+}
+
 # Used to clear all sub-processes, etc, in child process.
 sub _clear_all {
     if ( $#_ != 0 ) { confess 'invalid call' }
     my ( $self ) = @_;
 
     $self->_cv(undef);
+    $self->_future(undef);
     $self->_last_error(undef);
     $self->_ordered_count(0);
     $self->_ordered_responses( [] );
