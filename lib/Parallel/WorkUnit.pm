@@ -1,5 +1,5 @@
-
-# Copyright (C) 2015-2020 Joelle Maslak
+#
+# Copyright (C) 2015-2023 Joelle Maslak
 # All Rights Reserved - See License
 #
 
@@ -94,6 +94,15 @@ does not require AnyEvent to be installed for other functionality to work.
 
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
+
+=head1 CAVEATS
+
+This module uses L<Storable> to serialize objects, except for objects
+that have a C<FREEZE> and C<THAW> method defined, in which case those
+methods are used.  As a result, it cannot serialize some objects, such
+as C<REGEXP> (sometimes), C<CODE>, or C<OBJECT> (I.E. Corinna objects
+created with the C<class> statement in Perl 5.38+), unless these
+objects also have a C<FREEZE> and C<THAW> method defined.
 
 =cut
 
@@ -797,7 +806,12 @@ sub _send {
     if ( $#_ != 3 ) { confess 'invalid call'; }
     my ( $self, $fh, $type, $data ) = @_;
 
-    my $msg = Storable::freeze( \$data );
+    my $msg;
+    if ( blessed($data) && ($data->can('FREEZE')) && ($data->can('THAW')) ) {
+        $msg = ref($data) . "!::!" . $data->FREEZE();
+    } else {
+        $msg = "!::!" . Storable::freeze( \$data );
+    }
 
     if ( !defined($msg) ) {
         die 'freeze() returned undef for child return value';
@@ -844,7 +858,13 @@ sub _read_result {
         if ( defined($ret) ) { $result .= $part; }
     }
 
-    my $data = ${ Storable::thaw($result) };
+    my ($class, $frozen) = split("!::!", $result);
+    my $data;
+    if ($class eq "") {
+        $data = ${ Storable::thaw($frozen) };
+    } else {
+        $data = $class->THAW($frozen);
+    }
 
     my $caller = $self->_subprocs()->{$child}{caller};
     delete $self->_subprocs()->{$child};

@@ -51,5 +51,20 @@ SKIP: {
     );
 }
 
+class baz {
+    field $x : param;
+    method FREEZE() { return $x }
+    sub THAW {
+        my ($class, $data) = @_;
+        $class->new( x => $data );
+    }
+}
+$x = baz->new( x => 2 );
+
+$wu->async(sub { $x }, sub { $result = shift; } );
+
+$wu->waitall();
+ok( lives { $wu->waitall(); }, "Can store a class object with FREEZE" );
+
 done_testing();
 
