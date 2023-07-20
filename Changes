@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.232012  2023-07-20 20:09:10+00:00 UTC (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
  * Fix test error on older Perls
 

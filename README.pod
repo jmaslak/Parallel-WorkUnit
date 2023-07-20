@@ -8,7 +8,7 @@ Parallel::WorkUnit - Provide multi-paradigm forking with ability to pass back da
 
 =head1 VERSION
 
-version 2.232010
+version 2.232012
 
 =head1 SYNOPSIS
 
@@ -55,7 +55,20 @@ version 2.232010
 
   $wu->use_anyevent(1);
   $wu->async( sub { ... }, \&callback );
-  $wu->waitall();  # Not strictly necessary
+  $wu->waitall();  # Not strictly necessary, callbacks happen within event loop
+
+
+  #
+  # IO::Async Interface (only usable if IO::Async is installed)
+  #
+  use IO::Async::Loop;
+  my $loop = IO::Async::Loop->new;
+  my $wu = Parallel::WorkUnit->new();
+
+  $wu->use_io_async($loop);
+  $wu->async( sub { ... }, \&callback );
+  $loop->run;
+
 
   #
   # Just spawn something into another process, don't capture return
@@ -73,8 +86,10 @@ the information, serialized, back).  It was designed to be very simple
 for a developer to use, with the ability to pass reasonably large amounts
 of data back to the parent process.
 
-This module is also designed to work with AnyEvent when desired, but it
-does not require AnyEvent to be installed for other functionality to work.
+This module is also designed to work with AnyEvent or IO::Async (preferred
+for new code) when desired, but it does not require AnyEvent or IO::Async
+to be installed for other functionality to
+work.
 
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
@@ -92,6 +107,20 @@ C<waitall()> method.  However, the processes are integrated into a
 standard C<AnyEvent> loop, so it isn't strictly necessary to call C<waitall()>.
 In addition, a call to C<waitall()> will execute other processes in
 the C<AnyEvent> event loop.
+
+The default value is false.
+
+=head2 use_io_async
+
+  $wu->use_io_async($loop);
+
+When set to an IO::Async::Loop, creates IO::Async watchers for each
+asyncronous or queued job.  The equivilent of an C<IO::Async> condition
+variable C<recv()>, used when all processes finish executing, is the
+C<waitall()> method.  However, the processes are integrated into a
+standard C<IO::Async> loop, so it isn't strictly necessary to call C<waitall()>.
+In addition, a call to C<waitall()> will execute other processes in
+the C<IO::Async> event loop.
 
 The default value is false.
 
