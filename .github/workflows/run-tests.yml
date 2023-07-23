@@ -10,6 +10,6 @@ on:
 
 jobs:
   build-and-test-with-anyevent:
-    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test-with-anyevent.yml
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test-with-anyevent.yml@v1
   build-and-test-without-anyevent:
-    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test.yml
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test.yml@v1
