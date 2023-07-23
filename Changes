@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.232041  2023-07-23 16:50:17+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
  * Add tests for class objects on 5.38+
  * Add documentation caveats about class objects (and also CODE
