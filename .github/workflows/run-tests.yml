@@ -1,0 +1,15 @@
+name: Execute tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-and-test-with-anyevent:
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test-with-anyevent.yml
+  build-and-test-without-anyevent:
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test.yml
