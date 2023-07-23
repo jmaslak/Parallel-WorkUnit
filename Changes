@@ -1,4 +1,6 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * Removed broken IO::Async support.
 
 2.232012  2023-07-20 20:09:10+00:00 UTC (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
