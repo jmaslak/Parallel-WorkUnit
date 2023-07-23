@@ -24,7 +24,7 @@ SKIP: {
     }
 
     require IO::Async::Loop;
-    my $loop = IO::Async::Loop->new;
+    my $loop = IO::Async::Loop->new();
 
     # Set Timeout
     local $SIG{ALRM} = sub { die "timeout\n"; };

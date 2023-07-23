@@ -73,6 +73,7 @@ use Try::Tiny;
 
 
   #
+  # EXPERIMENTAL - FAILS ON MANY PLATFORMS (AS DOES CURRENT IO::Async)
   # IO::Async Interface (only usable if IO::Async is installed)
   #
   use IO::Async::Loop;
@@ -100,10 +101,11 @@ the information, serialized, back).  It was designed to be very simple
 for a developer to use, with the ability to pass reasonably large amounts
 of data back to the parent process.
 
-This module is also designed to work with AnyEvent or IO::Async (preferred
-for new code) when desired, but it does not require AnyEvent or IO::Async
-to be installed for other functionality to
-work.
+This module is also designed to work with AnyEvent or IO::Async when
+desired, but it does not require AnyEvent or IO::Async to be installed
+for other functionality to work. Note that IO::Async does not work on
+all platforms currently, and this support should be considered experimental
+at best, and definitely NOT used in production code.
 
 There are many other Parallel::* applications in CPAN - it would be worth
 any developer's time to look through those and choose the best one.
@@ -116,6 +118,9 @@ methods are used.  As a result, it cannot serialize some objects, such
 as C<REGEXP> (sometimes), C<CODE>, or C<OBJECT> (I.E. Corinna objects
 created with the C<class> statement in Perl 5.38+), unless these
 objects also have a C<FREEZE> and C<THAW> method defined.
+
+The IO::Async module does not seem to properly function in some environments,
+so caution should be used when using this code.
 
 =cut
 
@@ -171,6 +176,10 @@ C<waitall()> method.  However, the processes are integrated into a
 standard C<IO::Async> loop, so it isn't strictly necessary to call C<waitall()>.
 In addition, a call to C<waitall()> will execute other processes in
 the C<IO::Async> event loop.
+
+NOTE: This is considered experimental at best, as IO::Async does not work
+on all platforms at this time.  Generally, this functionality should be
+avoided for production system.
 
 The default value is false.
 
