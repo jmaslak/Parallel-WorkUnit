@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.232040  2023-07-23 05:39:58+00:00 UTC (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
  * Removed broken IO::Async support.
 
