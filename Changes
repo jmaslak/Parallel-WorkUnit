@@ -1,23 +1,10 @@
 {{$NEXT}}
-
-2.232040  2023-07-23 05:39:58+00:00 UTC (TRIAL RELEASE)
- Joelle Maslak <jmaslak@antelope.net>
- * Removed broken IO::Async support.
-
-2.232012  2023-07-20 20:09:10+00:00 UTC (TRIAL RELEASE)
- Joelle Maslak <jmaslak@antelope.net>
- * Fix test error on older Perls
-
-2.232011  2023-07-19 22:36:37-06:00 America/Denver (TRIAL RELEASE)
- Joelle Maslak <jmaslak@antelope.net>
- * Add support for objects with FREEZE/THAW methods (use those over
-   other methods)
-
-2.232010  2023-07-19 20:22:17-06:00 America/Denver (TRIAL RELEASE)
  Joelle Maslak <jmaslak@antelope.net>
  * Add tests for class objects on 5.38+
  * Add documentation caveats about class objects (and also CODE
    and REGEXP references)
+ * Add support for objects with FREEZE/THAW methods (use those over
+   other methods)
 
 2.202270  2020-08-14 21:19:08+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
