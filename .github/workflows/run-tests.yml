@@ -1,3 +1,6 @@
+# Executes test, once with AnyEvent (which can be used if it is installed,
+# but is not part of the dependency chain) and with just the dependency
+# chain.
 name: Execute tests
 
 on:
