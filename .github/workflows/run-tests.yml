@@ -13,6 +13,6 @@ on:
 
 jobs:
   build-and-test-with-anyevent:
-    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test-with-anyevent.yml@v1
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test-with-anyevent.yml@v2
   build-and-test-without-anyevent:
-    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test.yml@v1
+    uses: jmaslak/github_workflows/.github/workflows/cpan-dzil-test.yml@v2
