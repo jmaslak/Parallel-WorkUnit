@@ -1,4 +1,6 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * Fix test suite bug triggered by Perl 5.39.1
 
 2.232041  2023-07-23 16:50:17+00:00 UTC
  Joelle Maslak <jmaslak@antelope.net>
