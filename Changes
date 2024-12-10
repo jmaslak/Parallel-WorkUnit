@@ -1,4 +1,6 @@
 {{$NEXT}}
+ Joelle Maslak <jmaslak@antelope.net>
+ * Added queueall() method to call queue() over a list of data.
 
 2.232180  2023-08-06 11:04:38-06:00 America/Denver
  Joelle Maslak <jmaslak@antelope.net>

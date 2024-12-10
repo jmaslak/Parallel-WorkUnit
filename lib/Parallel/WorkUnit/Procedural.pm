@@ -1,5 +1,5 @@
 
-# Copyright (C) 2015-2019 Joelle Maslak
+# Copyright (C) 2015-2024 Joelle Maslak
 # All Rights Reserved - See License
 #
 
@@ -16,7 +16,7 @@ use autodie;
 require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(
-  async asyncs proc_count proc_wait queue start waitall waitone WorkUnit
+  async asyncs proc_count proc_wait queue queueall start waitall waitone WorkUnit
 );
 our %EXPORT_TAGS = ( all => [@EXPORT_OK] );
 
@@ -41,6 +41,7 @@ use namespace::autoclean;
   #
   WorkUnit->max_children(5);
   queue sub { ... }, \&callback;
+  queueall \@data, sub { ... }, \&callback;
   waitall;
 
 
@@ -167,6 +168,16 @@ Executes C<Parallel::WorkUnit->queue()>
 =cut
 
 sub queue { return WorkUnit->queue(@_) }
+
+=func queueall $data, sub { ... }, \&callback
+
+Added in 2.243450.
+
+Executes C<Parallel::WorkUnit->queueall()>
+
+=cut
+
+sub queueall { return WorkUnit->queueall(@_) }
 
 =func start { ... };
 
