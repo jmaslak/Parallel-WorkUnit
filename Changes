@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.243480  2024-12-12 20:16:25-07:00 America/Denver
  Joelle Maslak <jmaslak@antelope.net>
  * [bugfix] Tests were failing on Perl 5.38 with
    Feature::Compat::Class > 0.06.
